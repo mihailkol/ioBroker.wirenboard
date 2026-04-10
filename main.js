@@ -1,179 +1,324 @@
 'use strict';
 
-/*
- * Created with @iobroker/create-adapter v3.1.2
- */
-
-// The adapter-core module gives you access to the core ioBroker functions
-// you need to create an adapter
-const utils = require('@iobroker/adapter-core');
-
-// Load your modules here, e.g.:
-// const fs = require('fs');
+const utils          = require('@iobroker/adapter-core');
+const path           = require('path');
+const DeviceManager  = require('./lib/device-manager');
+const ObjectManager  = require('./lib/object-manager');
+const { parseTemplate, loadTemplatesFromDir } = require('./lib/wb-template-parser');
+const fs             = require('fs');
 
 class Wirenboard extends utils.Adapter {
-    /**
-     * @param {Partial<utils.AdapterOptions>} [options] - Adapter options
-     */
     constructor(options) {
-        super({
-            ...options,
-            name: 'wirenboard',
-        });
-        this.on('ready', this.onReady.bind(this));
+        super({ ...options, name: 'wirenboard' });
+
+        this._managers    = [];   // DeviceManager[] — по одному на шлюз
+        this._objManager  = null; // ObjectManager
+        this._writableMap = new Map(); // stateId → { ch, slaveId, manager }
+
+        this.on('ready',       this.onReady.bind(this));
         this.on('stateChange', this.onStateChange.bind(this));
-        // this.on('objectChange', this.onObjectChange.bind(this));
-        // this.on('message', this.onMessage.bind(this));
-        this.on('unload', this.onUnload.bind(this));
+        this.on('message',     this.onMessage.bind(this));
+        this.on('unload',      this.onUnload.bind(this));
     }
 
-    /**
-     * Is called when databases are connected and adapter received configuration.
-     */
+    // ─── Старт ────────────────────────────────────────────────────────────────
+
     async onReady() {
-        // Initialize your adapter here
+        this.log.info('Wiren Board adapter starting...');
+        await this.setStateAsync('info.connection', false, true);
 
-        // The adapters config (in the instance object everything under the attribute "native") is accessible via
-        // this.config:
-        this.log.debug('config option1: ${this.config.option1}');
-        this.log.debug('config option2: ${this.config.option2}');
+        // Загружаем WB-шаблоны устройств
+        const templates = this._loadTemplates();
+        this.log.info(`Loaded ${templates.bySignature.size} device templates`);
 
-        /*
-        For every state in the system there has to be also an object of type state
-        Here a simple template for a boolean variable named "testVariable"
-        Because every adapter instance uses its own unique namespace variable names can't collide with other adapters variables
+        this._objManager = new ObjectManager(this);
 
-        IMPORTANT: State roles should be chosen carefully based on the state's purpose.
-                   Please refer to the state roles documentation for guidance:
-                   https://www.iobroker.net/#en/documentation/dev/stateroles.md
-        */
-        await this.setObjectNotExistsAsync('testVariable', {
-            type: 'state',
-            common: {
-                name: 'testVariable',
-                type: 'boolean',
-                role: 'indicator',
-                read: true,
-                write: true,
+        const gateways = this.config.gateways || [];
+        const devices  = this.config.devices  || [];
+
+        if (gateways.length === 0) {
+            this.log.warn('No gateways configured');
+            return;
+        }
+
+        // Запускаем все шлюзы параллельно
+        await Promise.all(
+            gateways
+                .filter(gw => gw.enabled !== false)
+                .map(gw => this._startGateway(gw, devices, templates)
+                    .catch(e => this.log.error(`Gateway "${gw.name}" start error: ${e.message}`))
+                )
+        );
+
+        await this._updateGlobalConnection();
+    }
+
+    // ─── Запуск шлюза ─────────────────────────────────────────────────────────
+
+    async _startGateway(gw, allDevices, templates) {
+        this.log.info(`Starting gateway "${gw.name}" (${gw.host}:${gw.port})`);
+
+        // Устройства этого шлюза
+        const gwDevices = allDevices
+            .filter(d => d.enabled !== false && d.gateway === gw.name)
+            .map(d => {
+                const tmpl = templates.byType.get(d.deviceType);
+                if (!tmpl) {
+                    this.log.warn(`No template for device type "${d.deviceType}", skipping`);
+                    return null;
+                }
+                return {
+                    slaveId:    d.slaveId,
+                    deviceType: d.deviceType,
+                    name:       d.name,
+                    deviceId:   _makeDeviceId(gw, d),
+                    template:   tmpl,
+                };
+            })
+            .filter(Boolean);
+
+        if (gwDevices.length === 0) {
+            this.log.warn(`Gateway "${gw.name}": no valid devices configured`);
+            return;
+        }
+
+        const mgr = new DeviceManager({
+            host:            gw.host,
+            port:            gw.port,
+            pollInterval:    gw.pollInterval    || this.config.pollInterval    || 10000,
+            requestTimeout:  this.config.requestTimeout || 3000,
+            devices:         gwDevices,
+
+            onDeviceReady: async (deviceState) => {
+                this.log.debug(`Device ready: ${deviceState.deviceId}`);
+                try {
+                    await this._objManager.createDeviceObjects(deviceState);
+                    // Регистрируем writable каналы для подписки
+                    this._registerWritable(deviceState, mgr);
+                } catch (e) {
+                    this.log.error(`createDeviceObjects error (${deviceState.deviceId}): ${e.message}`);
+                }
             },
-            native: {},
+
+            onStateChange: async (deviceId, channelId, value, unit) => {
+                const stateId = `${deviceId}.${channelId}`;
+                try {
+                    await this.setStateAsync(stateId, { val: value, ack: true });
+                } catch (e) {
+                    this.log.debug(`setStateAsync ${stateId}: ${e.message}`);
+                }
+            },
+
+            onConnectionChange: async (deviceId, connected) => {
+                try {
+                    await this.setStateAsync(`${deviceId}.info.connection`, connected, true);
+                    await this._updateGlobalConnection();
+                } catch (e) {
+                    this.log.debug(`connection state error: ${e.message}`);
+                }
+            },
+
+            logger: (msg) => this.log.debug(msg),
         });
 
-        // In order to get state updates, you need to subscribe to them. The following line adds a subscription for our variable we have created above.
-        this.subscribeStates('testVariable');
-        // You can also add a subscription for multiple states. The following line watches all states starting with "lights."
-        // this.subscribeStates('lights.*');
-        // Or, if you really must, you can also watch all states. Don't do this if you don't need to. Otherwise this will cause a lot of unnecessary load on the system:
-        // this.subscribeStates('*');
+        // Создаём канальные объекты в ioBroker до старта менеджера
+        for (const dev of gwDevices) {
+            await this._objManager.ensureDeviceChannel(dev);
+        }
 
-        /*
-            setState examples
-            you will notice that each setState will cause the stateChange event to fire (because of above subscribeStates cmd)
-        */
-        // the variable testVariable is set to true as command (ack=false)
-        await this.setState('testVariable', true);
-
-        // same thing, but the value is flagged "ack"
-        // ack should be always set to true if the value is received from or acknowledged from the target system
-        await this.setState('testVariable', { val: true, ack: true });
-
-        // same thing, but the state is deleted after 30s (getState will return null afterwards)
-        await this.setState('testVariable', { val: true, ack: true, expire: 30 });
-
-        // examples for the checkPassword/checkGroup functions
-        const pwdResult = await this.checkPasswordAsync('admin', 'iobroker');
-        this.log.info(`check user admin pw iobroker: ${pwdResult}`);
-
-        const groupResult = await this.checkGroupAsync('admin', 'admin');
-        this.log.info(`check group user admin group admin: ${groupResult}`);
+        await mgr.start();
+        this._managers.push(mgr);
     }
 
-    /**
-     * Is called when adapter shuts down - callback has to be called under any circumstances!
-     *
-     * @param {() => void} callback - Callback function
-     */
-    onUnload(callback) {
+    // ─── Writable states ──────────────────────────────────────────────────────
+
+    _registerWritable(deviceState, mgr) {
+        const writableChannels = deviceState.template.parameters
+            .filter(p => p.writable);
+
+        for (const ch of writableChannels) {
+            const stateId = `${this.namespace}.${deviceState.deviceId}.${ch.id}`;
+            this._writableMap.set(stateId, {
+                ch,
+                slaveId: deviceState.slaveId,
+                mgr,
+            });
+        }
+
+        if (writableChannels.length > 0) {
+            this.subscribeStates(`${deviceState.deviceId}.*`);
+        }
+    }
+
+    // ─── State change (запись в устройство) ───────────────────────────────────
+
+    async onStateChange(id, state) {
+        if (!state || state.ack) return;
+
+        const info = this._writableMap.get(id);
+        if (!info) return;
+
+        const { ch, slaveId, mgr } = info;
+
         try {
-            // Here you must clear all timeouts or intervals that may still be active
-            // clearTimeout(timeout1);
-            // clearTimeout(timeout2);
-            // ...
-            // clearInterval(interval1);
-
-            callback();
-        } catch (error) {
-            this.log.error(`Error during unloading: ${error.message}`);
-            callback();
+            await _writeChannel(ch, slaveId, state.val, mgr.client);
+            this.log.info(`Written ${id} = ${state.val}`);
+            await this.setStateAsync(id, state.val, true);
+        } catch (err) {
+            this.log.error(`Write error ${id}: ${err.message}`);
         }
     }
 
-    // If you need to react to object changes, uncomment the following block and the corresponding line in the constructor.
-    // You also need to subscribe to the objects with `this.subscribeObjects`, similar to `this.subscribeStates`.
-    // /**
-    //  * Is called if a subscribed object changes
-    //  * @param {string} id
-    //  * @param {ioBroker.Object | null | undefined} obj
-    //  */
-    // onObjectChange(id, obj) {
-    //     if (obj) {
-    //         // The object was changed
-    //         this.log.info(`object ${id} changed: ${JSON.stringify(obj)}`);
-    //     } else {
-    //         // The object was deleted
-    //         this.log.info(`object ${id} deleted`);
-    //     }
-    // }
+    // ─── Сообщения от UI (консоль, сканирование) ──────────────────────────────
 
-    /**
-     * Is called if a subscribed state changes
-     *
-     * @param {string} id - State ID
-     * @param {ioBroker.State | null | undefined} state - State object
-     */
-    onStateChange(id, state) {
-        if (state) {
-            // The state was changed
-            this.log.info(`state ${id} changed: ${state.val} (ack = ${state.ack})`);
+    async onMessage(obj) {
+        if (!obj || typeof obj !== 'object') return;
 
-            if (state.ack === false) {
-                // This is a command from the user (e.g., from the UI or other adapter)
-                // and should be processed by the adapter
-                this.log.info(`User command received for ${id}: ${state.val}`);
+        const respond = (result) => {
+            if (obj.callback) this.sendTo(obj.from, obj.command, result, obj.callback);
+        };
 
-                // TODO: Add your control logic here
+        switch (obj.command) {
+            case 'scan': {
+                // Сканировать шину указанного шлюза
+                const { gatewayName, from = 1, to = 247 } = obj.message || {};
+                const mgr = this._managers.find(m =>
+                    m.host === obj.message?.host && m.port === obj.message?.port
+                );
+                if (!mgr) {
+                    respond({ error: 'Gateway not found or not connected' });
+                    return;
+                }
+                try {
+                    const found = await mgr.scan(from, to, (cur, total) => {
+                        // Прогресс отправляем как промежуточный результат
+                        this.sendTo(obj.from, 'scanProgress', { cur, total }, obj.callback);
+                    });
+                    respond({ result: found });
+                } catch (e) {
+                    respond({ error: e.message });
+                }
+                break;
             }
-        } else {
-            // The object was deleted or the state value has expired
-            this.log.info(`state ${id} deleted`);
+
+            case 'listGateways': {
+                respond({
+                    result: this._managers.map(m => ({
+                        host:      m.host,
+                        port:      m.port,
+                        connected: m.client.connected,
+                        devices:   m.getAllDevices().map(d => ({
+                            deviceId:   d.deviceId,
+                            name:       d.name,
+                            slaveId:    d.slaveId,
+                            deviceType: d.deviceType,
+                            connected:  d.connected,
+                        })),
+                    })),
+                });
+                break;
+            }
+
+            case 'readRaw': {
+                // Прямое чтение регистра для диагностики
+                const { host, port, slaveId, regType, address, count = 1 } = obj.message || {};
+                const mgr = this._managers.find(m => m.host === host && m.port === port);
+                if (!mgr) { respond({ error: 'Gateway not found' }); return; }
+                try {
+                    let words;
+                    if (regType === 'holding') {
+                        words = await mgr.client.readHolding(slaveId, address, count);
+                    } else {
+                        words = await mgr.client.readInput(slaveId, address, count);
+                    }
+                    respond({ result: words });
+                } catch (e) {
+                    respond({ error: e.message });
+                }
+                break;
+            }
+
+            default:
+                respond({ error: `Unknown command: ${obj.command}` });
         }
     }
-    // If you need to accept messages in your adapter, uncomment the following block and the corresponding line in the constructor.
-    // /**
-    //  * Some message was sent to this instance over message box. Used by email, pushover, text2speech, ...
-    //  * Using this method requires "common.messagebox" property to be set to true in io-package.json
-    //  * @param {ioBroker.Message} obj
-    //  */
-    // onMessage(obj) {
-    //     if (typeof obj === 'object' && obj.message) {
-    //         if (obj.command === 'send') {
-    //             // e.g. send email or pushover or whatever
-    //             this.log.info('send command');
 
-    //             // Send response in callback if required
-    //             if (obj.callback) this.sendTo(obj.from, obj.command, 'Message received', obj.callback);
-    //         }
-    //     }
-    // }
+    // ─── Остановка ────────────────────────────────────────────────────────────
+
+    async onUnload(callback) {
+        try {
+            this.log.info('Wiren Board adapter stopping...');
+            await Promise.all(this._managers.map(m => m.stop()));
+            this._managers = [];
+            await this.setStateAsync('info.connection', false, true);
+        } catch (e) {
+            this.log.error(`onUnload error: ${e.message}`);
+        } finally {
+            callback();
+        }
+    }
+
+    // ─── Утилиты ─────────────────────────────────────────────────────────────
+
+    _loadTemplates() {
+        // Ищем шаблоны в папке lib/wb-templates/ адаптера
+        const templatesDir = path.join(__dirname, 'lib', 'wb-templates');
+        if (!fs.existsSync(templatesDir)) {
+            this.log.warn(`Templates directory not found: ${templatesDir}`);
+            return { bySignature: new Map(), byType: new Map(), all: [] };
+        }
+        const result = loadTemplatesFromDir(templatesDir);
+        for (const e of result.errors) {
+            this.log.warn(`Template parse error ${e.file}: ${e.error}`);
+        }
+        return result;
+    }
+
+    async _updateGlobalConnection() {
+        const anyOnline = this._managers.some(m =>
+            m.getAllDevices().some(d => d.connected)
+        );
+        await this.setStateAsync('info.connection', anyOnline, true);
+    }
 }
 
+// ─── Запись в канал ───────────────────────────────────────────────────────────
+
+async function _writeChannel(ch, slaveId, value, client) {
+    const sid = ch.slaveId || slaveId;
+
+    if (ch.regType === 'coil') {
+        await client.writeCoil(sid, ch.address, !!value);
+        return;
+    }
+
+    // holding: конвертируем значение обратно в сырой регистр
+    let raw = value;
+    if (ch.scale && ch.scale !== 1) {
+        raw = Math.round(value / ch.scale);
+    } else {
+        raw = Math.round(value);
+    }
+
+    // Знаковые значения → беззнаковые для Modbus
+    if (raw < 0) raw = raw + 0x10000;
+
+    await client.writeHolding(sid, ch.address, raw & 0xFFFF);
+}
+
+// ─── Безопасный ID устройства ─────────────────────────────────────────────────
+
+function _makeDeviceId(gw, devCfg) {
+    const gwPart  = (gw.name  || 'gw').replace(/[^a-zA-Z0-9_]/g, '_');
+    const devPart = (devCfg.name || `${devCfg.deviceType}_${devCfg.slaveId}`)
+        .replace(/[^a-zA-Z0-9_]/g, '_');
+    return `${gwPart}_${devPart}`;
+}
+
+// ─── Точка входа ──────────────────────────────────────────────────────────────
+
 if (require.main !== module) {
-    // Export the constructor in compact mode
-    /**
-     * @param {Partial<utils.AdapterOptions>} [options] - Adapter options
-     */
     module.exports = options => new Wirenboard(options);
 } else {
-    // otherwise start the instance directly
     new Wirenboard();
 }
