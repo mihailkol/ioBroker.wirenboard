@@ -1,0 +1,90 @@
+{
+    "common": {
+        "name": "wirenboard",
+        "version": "0.0.1",
+        "news": {
+            "0.0.1": {
+                "en": "initial release",
+                "de": "Erstveröffentlichung",
+                "ru": "Начальная версия",
+                "pt": "lançamento inicial",
+                "nl": "Eerste uitgave",
+                "fr": "Première version",
+                "it": "Versione iniziale",
+                "es": "Versión inicial",
+                "pl": "Pierwsze wydanie",
+                "uk": "Початкова версія",
+                "zh-cn": "首次出版"
+            }
+        },
+        "titleLang": {
+            "en": "WirenBoard",
+            "de": "WirenBoard",
+            "ru": "WirenBoard",
+            "pt": "WirenBoard",
+            "nl": "Draadbord",
+            "fr": "Tableau filaire",
+            "it": "WirenBoard",
+            "es": "tablero de alambre",
+            "pl": "Płyta WirenBoard",
+            "uk": "WirenBoard",
+            "zh-cn": "接线板"
+        },
+        "desc": {
+            "en": "wirenboard io RS485 devices",
+            "de": "Wirenboard io RS485-Geräte",
+            "ru": "устройства Wirenboard io RS485",
+            "pt": "dispositivos wirenboard io RS485",
+            "nl": "wirenboard io RS485-apparaten",
+            "fr": "Appareils Wirenboard io RS485",
+            "it": "dispositivi wirenboard io RS485",
+            "es": "dispositivos wireboard io RS485",
+            "pl": "urządzenia wirenboard io RS485",
+            "uk": "wirenboard io RS485 пристроїв",
+            "zh-cn": "线路板 io RS485 设备"
+        },
+        "authors": [
+            "mihailkol <m89139158466@gmail.com>"
+        ],
+        "keywords": [
+            "wirenboard",
+            "rs485"
+        ],
+        "licenseInformation": {
+            "type": "free",
+            "license": "MIT"
+        },
+        "platform": "Javascript/Node.js",
+        "icon": "wirenboard.png",
+        "enabled": true,
+        "extIcon": "https://raw.githubusercontent.com/mihailkol/ioBroker.wirenboard/main/admin/wirenboard.png",
+        "readme": "https://github.com/mihailkol/ioBroker.wirenboard/blob/main/README.md",
+        "loglevel": "info",
+        "tier": 3,
+        "mode": "daemon",
+        "type": "iot-systems",
+        "compact": true,
+        "connectionType": "local",
+        "dataSource": "poll",
+        "adminUI": {
+            "config": "materialize"
+        },
+        "eraseOnUpload": true,
+        "dependencies": [
+            {
+                "js-controller": ">=6.0.11"
+            }
+        ],
+        "globalDependencies": [
+            {
+                "admin": ">=7.0.23"
+            }
+        ]
+    },
+    "native": {
+        "option1": true,
+        "option2": "42"
+    },
+    "objects": [],
+    "instanceObjects": []
+}
