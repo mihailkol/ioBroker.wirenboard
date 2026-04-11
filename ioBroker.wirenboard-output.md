@@ -3,7 +3,7 @@
 ## 📊 Project Information
 
 - **Project Name**: `ioBroker.wirenboard`
-- **Generated On**: 2026-04-11 04:44:03 (Asia/Novosibirsk / GMT+07:00)
+- **Generated On**: 2026-04-11 06:54:42 (Asia/Novosibirsk / GMT+07:00)
 - **Total Files Processed**: 45
 - **Export Tool**: Easy Whole Project to Single Text File for LLMs v1.1.0
 - **Tool Author**: Jota / José Guilherme Pandolfi
@@ -51,10 +51,10 @@
 │   │   ├── 📄 config-wb-mai6-fw-2.2.json.jinja (66.37 KB)
 │   │   └── 📄 config-wb-mr6c.json.jinja (56.09 KB)
 │   ├── 📄 adapter-config.d.ts (607 B)
-│   ├── 📄 device-manager.js (15.82 KB)
+│   ├── 📄 device-manager.js (16.1 KB)
 │   ├── 📄 modbus-client.js (12 KB)
 │   ├── 📄 object-manager.js (5.14 KB)
-│   └── 📄 wb-template-parser.js (14.74 KB)
+│   └── 📄 wb-template-parser.js (15.33 KB)
 ├── 📁 test/
 │   ├── 📄 integration.js (243 B)
 │   ├── 📄 mocha.setup.js (398 B)
@@ -64,7 +64,7 @@
 ├── 📄 eslint.config.mjs (1.17 KB)
 ├── 📄 io-package.json (2.87 KB)
 ├── 📄 LICENSE (1.07 KB)
-├── 📄 main.js (13.04 KB)
+├── 📄 main.js (12.98 KB)
 ├── 📄 main.test.js (846 B)
 ├── 📄 package-lock.json (408.23 KB)
 ├── 📄 package.json (2.44 KB)
@@ -127,7 +127,7 @@
 | Total Directories | 7 |
 | Text Files | 38 |
 | Binary Files | 7 |
-| Total Size | 754.94 KB |
+| Total Size | 755.75 KB |
 
 ### 📄 File Types Distribution
 
@@ -2206,15 +2206,15 @@ export {};
 ### <a id="📄-lib-device-manager-js"></a>📄 `lib/device-manager.js`
 
 **File Info:**
-- **Size**: 15.82 KB
+- **Size**: 16.1 KB
 - **Extension**: `.js`
 - **Language**: `javascript`
 - **Location**: `lib/device-manager.js`
 - **Relative Path**: `lib`
-- **Created**: 2026-04-10 18:56:51 (Asia/Novosibirsk / GMT+07:00)
-- **Modified**: 2026-04-10 18:56:51 (Asia/Novosibirsk / GMT+07:00)
-- **MD5**: `12849e608dc498d22966ce1866fd6e6c`
-- **SHA256**: `e3b7cddf2da406f677b89cd69ca64ebac20b888984309095206d9fdec049e4d6`
+- **Created**: 2026-04-11 06:25:00 (Asia/Novosibirsk / GMT+07:00)
+- **Modified**: 2026-04-11 06:25:13 (Asia/Novosibirsk / GMT+07:00)
+- **MD5**: `e69cb9d29db406442905ebb9cdc0307e`
+- **SHA256**: `571c2398cfc1db3ab58cd5ee1140445aaa60df7a539fae1b12dcc00ae74d80c0`
 - **Encoding**: UTF-8
 
 **File code content:**
@@ -2631,9 +2631,11 @@ async function _readFormatted(ch, slaveId, client) {
  */
 function _getActiveChannels(channels, slaveId) {
     return channels
-        .filter(ch => ch.enabled !== false)
-        .filter(ch => !ch.condition)          // условные каналы пропускаем
-        .filter(ch => ch.role !== 'button')   // pushbutton не опрашиваем
+        .filter(ch => ch.enabled !== false)           // только включённые
+        .filter(ch => !ch.condition)                   // без runtime-условий
+        .filter(ch => ch.role !== 'button')            // pushbutton не опрашиваем
+        .filter(ch => ch.format !== 'string')          // строковые каналы пропускаем (Serial, FW Version)
+        .filter(ch => ch.format !== 'u64' || ch.regType === 'input')  // u64 holding (1-Wire ID) не читаем
         .map(ch => ({ ...ch, slaveId: ch.slaveId || slaveId }));
 }
 
@@ -3194,15 +3196,15 @@ module.exports = ObjectManager;
 ### <a id="📄-lib-wb-template-parser-js"></a>📄 `lib/wb-template-parser.js`
 
 **File Info:**
-- **Size**: 14.74 KB
+- **Size**: 15.33 KB
 - **Extension**: `.js`
 - **Language**: `javascript`
 - **Location**: `lib/wb-template-parser.js`
 - **Relative Path**: `lib`
-- **Created**: 2026-04-10 18:30:00 (Asia/Novosibirsk / GMT+07:00)
-- **Modified**: 2026-04-10 18:30:01 (Asia/Novosibirsk / GMT+07:00)
-- **MD5**: `b3c08a54f1067ed18adf30decd4e3151`
-- **SHA256**: `3b4fe3ed6e70ca50f38a25e3aba96865ba1247adc55ebc7b477e4e482f4dc69b`
+- **Created**: 2026-04-11 06:25:20 (Asia/Novosibirsk / GMT+07:00)
+- **Modified**: 2026-04-11 06:25:25 (Asia/Novosibirsk / GMT+07:00)
+- **MD5**: `9d4182b3216162f2d1f2c7855cedc230`
+- **SHA256**: `bc000bccbd953129d7b86fa2a39e87109e9a76d002e4a3d66000da0802260fad`
 - **Encoding**: UTF-8
 
 **File code content:**
@@ -3519,16 +3521,32 @@ function parseTemplate(source, filename = '') {
 
     const dev        = raw.device || {};
     const deviceType = raw.device_type || dev.id || path.basename(filename, '.json');
-    const title      = raw.title || dev.name || deviceType;
     const deprecated = !!raw.deprecated;
 
     const signatures = (raw.hw || []).map(h => h.signature).filter(Boolean);
 
-    const channels   = (dev.channels || [])
-        .map(ch => parseChannel(ch, null))
+    // Словарь переводов: en поверх ru
+    const translations = dev.translations || {};
+    const i18n = Object.assign({}, translations.ru || {}, translations.en || {});
+    const t = (str) => (str && i18n[str]) ? i18n[str] : (str || '');
+
+    const title = t(raw.title) || t(dev.name) || deviceType;
+
+    // Каналы с резолвингом названий
+    const channels = (dev.channels || [])
+        .map(ch => {
+            const parsed = parseChannel(ch, null);
+            if (!parsed) return null;
+            parsed.name = t(parsed.name);
+            return parsed;
+        })
         .filter(Boolean);
 
-    const parameters = parseParameters(dev.parameters);
+    // Параметры с резолвингом названий
+    const parameters = parseParameters(dev.parameters).map(p => {
+        p.name = t(p.name);
+        return p;
+    });
 
     return { deviceType, title, signatures, deprecated, channels, parameters };
 }
@@ -3735,9 +3753,9 @@ tests.packageFiles(path.join(__dirname, '..'));
 - **Location**: `io-package.json`
 - **Relative Path**: `root`
 - **Created**: 2026-04-10 16:01:43 (Asia/Novosibirsk / GMT+07:00)
-- **Modified**: 2026-04-10 16:01:43 (Asia/Novosibirsk / GMT+07:00)
-- **MD5**: `39b798726094ff82d56efdb0aa24a126`
-- **SHA256**: `6180467338a37e18411d1791e7e264e36447fa4791e22e68e02d2cc48c88da0f`
+- **Modified**: 2026-04-11 06:54:41 (Asia/Novosibirsk / GMT+07:00)
+- **MD5**: `a509412aaa2dbf70271f1bf6feeacbbf`
+- **SHA256**: `429b7aee792a78a388891bb122420997a03692ba89ea9d4098b37cb74b8ae641`
 - **Encoding**: UTF-8
 
 **File code content:**
@@ -3812,7 +3830,7 @@ tests.packageFiles(path.join(__dirname, '..'));
         "connectionType": "local",
         "dataSource": "poll",
         "adminUI": {
-            "config": "materialize"
+            "config": "json"
         },
         "eraseOnUpload": true,
         "dependencies": [
@@ -3840,15 +3858,15 @@ tests.packageFiles(path.join(__dirname, '..'));
 ### <a id="📄-main-js"></a>📄 `main.js`
 
 **File Info:**
-- **Size**: 13.04 KB
+- **Size**: 12.98 KB
 - **Extension**: `.js`
 - **Language**: `javascript`
 - **Location**: `main.js`
 - **Relative Path**: `root`
-- **Created**: 2026-04-10 19:02:00 (Asia/Novosibirsk / GMT+07:00)
-- **Modified**: 2026-04-10 19:02:10 (Asia/Novosibirsk / GMT+07:00)
-- **MD5**: `9923b04cb5363a50308764efb82867bb`
-- **SHA256**: `7feb63cf5f9b8664074d67b0deb9529ceefb6d3ec3547adfdca32027ba9c8c26`
+- **Created**: 2026-04-11 06:24:41 (Asia/Novosibirsk / GMT+07:00)
+- **Modified**: 2026-04-11 06:24:50 (Asia/Novosibirsk / GMT+07:00)
+- **MD5**: `b6dbbe44efe62749957624d2224f11ae`
+- **SHA256**: `deaf40c6d3f8bc1a0954a8cc0aecd95433d1112b10c3b927c6ff3ee49f88d05d`
 - **Encoding**: UTF-8
 
 **File code content:**
@@ -3881,7 +3899,6 @@ class Wirenboard extends utils.Adapter {
 
     async onReady() {
         this.log.info('Wiren Board adapter starting...');
-        await this.setStateAsync('info.connection', false, true);
 
         // Загружаем WB-шаблоны устройств
         const templates = this._loadTemplates();

@@ -67,7 +67,7 @@
         "connectionType": "local",
         "dataSource": "poll",
         "adminUI": {
-            "config": "materialize"
+            "config": "json"
         },
         "eraseOnUpload": true,
         "dependencies": [
