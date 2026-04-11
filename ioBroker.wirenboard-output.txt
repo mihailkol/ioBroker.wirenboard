@@ -5,7 +5,7 @@ PROJECT EXPORT FOR LLMs
 PROJECT INFORMATION:
 --------------------------------------------------
 Project Name: ioBroker.wirenboard
-Generated On: 2026-04-10 19:18:52 (Asia/Novosibirsk / GMT+07:00)
+Generated On: 2026-04-11 04:44:03 (Asia/Novosibirsk / GMT+07:00)
 Total Files Processed: 45
 Export Tool: Easy Whole Project to Single Text File for LLMs v1.1.0
 Tool Author: Jota / José Guilherme Pandolfi
@@ -42,7 +42,7 @@ PROJECT STRUCTURE
 │   │   ├── 📄 app.jsx (1.8 KB)
 │   │   └── 📄 index.jsx (710 B)
 │   ├── 📄 index_m.html (596 B)
-│   ├── 📄 jsonConfig.json (5.93 KB)
+│   ├── 📄 jsonConfig.json (3.53 KB)
 │   ├── 📄 style.css (749 B)
 │   ├── 📄 tsconfig.json (590 B)
 │   └── 📄 wirenboard.png (60.91 KB)
@@ -82,7 +82,7 @@ Total Files: 45
 Total Directories: 7
 Text Files: 38
 Binary Files: 7
-Total Size: 757.35 KB
+Total Size: 754.94 KB
 
 FILE TYPES DISTRIBUTION:
 ------------------------------
@@ -821,15 +821,15 @@ FILE: admin/jsonConfig.json
 
 FILE INFORMATION:
 ----------------------------------------
-Size: 5.93 KB
+Size: 3.53 KB
 Extension: .json
 Language: json
 Location: admin/jsonConfig.json
 Relative Path: admin
 Created: 2026-04-10 19:14:20 (Asia/Novosibirsk / GMT+07:00)
-Modified: 2026-04-10 19:18:51 (Asia/Novosibirsk / GMT+07:00)
-MD5: 1b7adfccd2673699062c26cfa2349b48
-SHA256: 1ee6bd5f17e8a356df4af4824a2c7605e7c1572db1aab28b44524a21eca7b76a
+Modified: 2026-04-11 04:44:02 (Asia/Novosibirsk / GMT+07:00)
+MD5: fd1f4adcead10bc0c4d89dd4cbff9ec5
+SHA256: 8519c0b7c5a0728f94e623fcb1b70b4205f890728b618024140112d300f4b6c8
 Encoding: UTF-8
 
 FILE CONTENT:
@@ -845,42 +845,13 @@ FILE CONTENT:
                     "type": "table",
                     "label": "Шлюзы RS485 / Modbus TCP",
                     "showSecondAddAt": 3,
-                    "items": {
-                        "name": {
-                            "type": "text",
-                            "label": "Название",
-                            "default": "Gateway 1",
-                            "width": "22%"
-                        },
-                        "host": {
-                            "type": "text",
-                            "label": "IP адрес",
-                            "default": "192.168.1.95",
-                            "width": "22%"
-                        },
-                        "port": {
-                            "type": "number",
-                            "label": "TCP порт",
-                            "default": 23,
-                            "min": 1,
-                            "max": 65535,
-                            "width": "12%"
-                        },
-                        "pollInterval": {
-                            "type": "number",
-                            "label": "Опрос (мс)",
-                            "default": 10000,
-                            "min": 1000,
-                            "max": 60000,
-                            "width": "15%"
-                        },
-                        "enabled": {
-                            "type": "checkbox",
-                            "label": "Активен",
-                            "default": true,
-                            "width": "8%"
-                        }
-                    }
+                    "items": [
+                        { "attr": "name",         "type": "text",     "title": "Название",   "default": "Gateway 1",    "width": "22%" },
+                        { "attr": "host",         "type": "text",     "title": "IP адрес",   "default": "192.168.1.95", "width": "22%" },
+                        { "attr": "port",         "type": "number",   "title": "TCP порт",   "default": 23,             "width": "12%", "min": 1, "max": 65535 },
+                        { "attr": "pollInterval", "type": "number",   "title": "Опрос (мс)", "default": 10000,          "width": "15%", "min": 1000 },
+                        { "attr": "enabled",      "type": "checkbox", "title": "Активен",    "default": true,           "width": "8%" }
+                    ]
                 }
             }
         },
@@ -892,52 +863,25 @@ FILE CONTENT:
                     "type": "table",
                     "label": "Modbus устройства",
                     "showSecondAddAt": 5,
-                    "items": {
-                        "name": {
-                            "type": "text",
-                            "label": "Название",
-                            "default": "Device 1",
-                            "width": "18%"
-                        },
-                        "gateway": {
-                            "type": "text",
-                            "label": "Шлюз",
-                            "default": "Gateway 1",
-                            "width": "18%"
-                        },
-                        "slaveId": {
-                            "type": "number",
-                            "label": "Slave ID",
-                            "default": 1,
-                            "min": 1,
-                            "max": 247,
-                            "width": "10%"
-                        },
-                        "deviceType": {
+                    "items": [
+                        { "attr": "name",    "type": "text",   "title": "Название",  "default": "Device 1",  "width": "18%" },
+                        { "attr": "gateway", "type": "text",   "title": "Шлюз",      "default": "Gateway 1", "width": "18%" },
+                        { "attr": "slaveId", "type": "number", "title": "Slave ID",  "default": 1,           "width": "10%", "min": 1, "max": 247 },
+                        {
+                            "attr": "deviceType",
                             "type": "select",
-                            "label": "Тип устройства",
+                            "title": "Тип устройства",
                             "default": "WB-MAI6-since-fw-2.2",
                             "width": "32%",
                             "options": [
-                                { "value": "WB-MAI6-since-fw-2.2", "label": "WB-MAI6 (аналоговые входы, fw ≥ 2.2)" },
-                                { "value": "WB-MAP3E fw2",         "label": "WB-MAP3E (3-фазный счётчик, fw ≥ 2.0)" },
-                                { "value": "WB-M1W2 MULTIPLE W1",  "label": "WB-M1W2 (1-Wire / счётные входы, fw ≥ 4.35)" },
-                                { "value": "WB-MR6C",              "label": "WB-MR6C (реле 6 каналов)" },
-                                { "value": "WB-MAP6S",             "label": "WB-MAP6S (счётчик 6 каналов)" },
-                                { "value": "WB-MAP12E",            "label": "WB-MAP12E (счётчик 12 каналов)" },
-                                { "value": "WB-MS",                "label": "WB-MS (датчик климата)" },
-                                { "value": "WB-MDM3",              "label": "WB-MDM3 (диммер 3 канала)" },
-                                { "value": "WB-MCM8",              "label": "WB-MCM8 (счётные входы 8 каналов)" },
-                                { "value": "WB-MIO",               "label": "WB-MIO (универсальный ввод-вывод)" }
+                                { "value": "WB-MAI6-since-fw-2.2", "label": "WB-MAI6 (аналоговые входы)" },
+                                { "value": "WB-MAP3E fw2",         "label": "WB-MAP3E (3-фазный счётчик)" },
+                                { "value": "WB-M1W2 MULTIPLE W1",  "label": "WB-M1W2 (1-Wire / счётные входы)" },
+                                { "value": "WB-MR6C",              "label": "WB-MR6C (реле 6 каналов)" }
                             ]
                         },
-                        "enabled": {
-                            "type": "checkbox",
-                            "label": "Активно",
-                            "default": true,
-                            "width": "8%"
-                        }
-                    }
+                        { "attr": "enabled", "type": "checkbox", "title": "Активно", "default": true, "width": "8%" }
+                    ]
                 }
             }
         },
@@ -945,33 +889,13 @@ FILE CONTENT:
             "type": "tab",
             "label": "Параметры",
             "items": {
-                "pollInterval": {
-                    "type": "number",
-                    "label": "Интервал опроса по умолчанию (мс)",
-                    "help": "Используется если не задан для конкретного шлюза",
-                    "default": 10000,
-                    "min": 1000,
-                    "max": 60000
-                },
-                "requestTimeout": {
-                    "type": "number",
-                    "label": "Таймаут запроса Modbus (мс)",
-                    "default": 3000,
-                    "min": 500,
-                    "max": 10000
-                },
-                "reconnectInterval": {
-                    "type": "number",
-                    "label": "Интервал переподключения (мс)",
-                    "default": 5000,
-                    "min": 1000,
-                    "max": 60000
-                }
+                "pollInterval":      { "type": "number", "label": "Интервал опроса (мс)",         "default": 10000, "min": 1000, "max": 60000 },
+                "requestTimeout":    { "type": "number", "label": "Таймаут Modbus (мс)",           "default": 3000,  "min": 500,  "max": 10000 },
+                "reconnectInterval": { "type": "number", "label": "Интервал переподключения (мс)", "default": 5000,  "min": 1000, "max": 60000 }
             }
         }
     }
 }
-
 ================================================================================
 
 
