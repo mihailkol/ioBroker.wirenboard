@@ -25,7 +25,6 @@ class Wirenboard extends utils.Adapter {
 
     async onReady() {
         this.log.info('Wiren Board adapter starting...');
-        await this.setStateAsync('info.connection', false, true);
 
         // Загружаем WB-шаблоны устройств
         const templates = this._loadTemplates();
