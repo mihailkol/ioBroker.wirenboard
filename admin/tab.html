@@ -29,6 +29,10 @@ body {
     background: var(--bg);
     color: var(--text);
     line-height: 1.5;
+    height: 100%;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
 }
 
 /* ── Layout ─────────────────────────────────────────────────────────── */
@@ -36,8 +40,8 @@ body {
     display: grid;
     grid-template-columns: 240px 1fr;
     grid-template-rows: 48px 1fr;
-    height: 100vh;
-    gap: 0;
+    height: 100%;
+    overflow: hidden;
 }
 
 /* ── Header ─────────────────────────────────────────────────────────── */
@@ -59,6 +63,8 @@ body {
     background: var(--surface);
     border-right: 1px solid var(--border);
     overflow-y: auto;
+    height: 100%;
+    min-height: 0;
     padding: 12px 0;
 }
 .sidebar-section { padding: 0 12px 8px; }
@@ -99,6 +105,7 @@ body {
 /* ── Main ─────────────────────────────────────────────────────────────── */
 .main {
     overflow-y: auto;
+    height: 100%;
     padding: 16px;
     display: flex;
     flex-direction: column;
@@ -268,6 +275,39 @@ body {
 }
 .badge-online  { background: #dcfce7; color: #15803d; }
 .badge-offline { background: #fee2e2; color: #b91c1c; }
+
+/* Принудительный скролл для работы внутри ioBroker Admin iframe */
+html {
+    overflow-y: auto !important;
+    height: auto !important;
+}
+
+body {
+    overflow-y: auto !important;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+.layout {
+    display: grid;
+    grid-template-columns: 240px 1fr;
+    grid-template-rows: 48px auto;
+    min-height: 100vh;
+    overflow: visible;
+}
+
+.main {
+    overflow-y: visible;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.sidebar {
+    overflow-y: auto;
+}
+
 </style>
 </head>
 <body>

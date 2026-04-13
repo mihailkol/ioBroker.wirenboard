@@ -1,10 +1,21 @@
 'use strict';
 
 // ─── Служебные имена каналов (не опрашиваем) ────────────────────────────────────
-const SYSTEM_CHANNEL_NAMES = new Set(['Serial', 'Uptime', 'FW Version', 'HW Batch Number',
-    'MCU Temperature', 'MCU Voltage', 'Supply Voltage', 'Minimum Voltage Since Startup',
-    'Minimum MCU Voltage Since Startup', 'Internal Temperature', '5V Output',
-    'Internal 5V Bus Voltage', 'AVCC Reference']);
+const SYSTEM_CHANNEL_NAMES = new Set([
+    'Serial', 'Серийный номер',
+    'Uptime', 'Время работы с момента включения',
+    'FW Version', 'Версия прошивки', 'FW_Version',
+    'HW Batch Number', 'Номер партии', 'HW_Batch_Number',
+    'MCU Temperature', 'Температура МК',
+    'MCU Voltage',
+    'Supply Voltage', 'Напряжение питания',
+    'Minimum Voltage Since Startup',
+    'Minimum MCU Voltage Since Startup',
+    'Internal Temperature', 'Температура внутри модуля',
+    '5V Output', 'Напряжение на клеммах 5V',
+    'Internal 5V Bus Voltage', 'Напряжение внутренней шины 5В',
+    'AVCC Reference',
+]);
 
 const utils          = require('@iobroker/adapter-core');
 const path           = require('path');
@@ -395,6 +406,7 @@ ${e.stack}`);
      * 2. Создаёт ioBroker-объекты для каналов которые активны в данной конфигурации
      * 3. Обновляет список каналов для поллинга
      */
+
     async _applyConfig(deviceState, config, mgr) {
         const { deviceId, template, slaveId } = deviceState;
 
@@ -414,6 +426,21 @@ ${e.stack}`);
         deviceState.deviceConfig = config;
         const activeChannels = this._resolveActiveChannels(template, config);
 
+        // 2.5. Удаляем старые объекты каналов
+        try {
+            const existing = await this.getObjectListAsync({
+                startkey: `${deviceId}.`,
+                endkey:   `${deviceId}.\u9999`,
+            });
+            for (const row of (existing?.rows || [])) {
+                const id = row.id;
+                if (id.includes('.info.') || id.endsWith('.config') || id === deviceId) continue;
+                await this.delObjectAsync(id);
+            }
+        } catch (e) {
+            this.log.debug(`cleanup error: ${e.message}`);
+        }
+
         // 3. Создаём объекты для активных каналов
         await this._objManager.createChannelObjects(deviceId, activeChannels);
 
@@ -428,6 +455,7 @@ ${e.stack}`);
      * Разбирает condition строки из шаблона.
      */
     _resolveActiveChannels(template, config) {
+        const seenIds = new Set();
         return template.channels.filter(ch => {
             if (ch.enabled === false) return false;
             if (ch.role === 'button') return false;
@@ -441,21 +469,31 @@ ${e.stack}`);
 
             // Если вход помечен как неактивен (-1) — пропускаем его каналы
             if (ch.condition) {
-                const inMatch = ch.condition.match(/in(\d+)_mode/);
+                const inMatch = ch.condition.match(/in(\d+)_(?:mode|type)/);
                 if (inMatch) {
                     const inNum = inMatch[1];
-                    if (config[`in${inNum}_mode`] === -1) return false;
+                    const modeKey = `in${inNum}_mode`;
+                    const typeKey = ch.condition.includes('_n_type') ? `in${inNum}_n_type` : `in${inNum}_type`;
+                    if (config[modeKey] === -1) return false;
+                    if (config[typeKey] === -1) return false;
                 }
             }
 
             if (!ch.condition) return true;
 
-            // Простой evaluator для condition вида "in1_mode==0"
+            let active;
             try {
-                return _evalCondition(ch.condition, config);
+                active = _evalCondition(ch.condition, config);
             } catch (_) {
-                return true; // если не можем разобрать — включаем
+                active = true;
             }
+
+            if (!active) return false;
+
+            // Дедупликация — оставляем первый активный канал с каждым id
+            if (seenIds.has(ch.id)) return false;
+            seenIds.add(ch.id);
+            return true;
         });
     }
 
@@ -526,14 +564,12 @@ async function _writeChannel(ch, slaveId, value, client) {
 function _evalCondition(condition, config) {
     if (!condition) return true;
 
-    // Убираем пробелы и переносы
-    const cond = condition.replace(/\s+/g, '');
+    // Убираем пробелы, переносы и скобки
+    const cond = condition.replace(/\s+/g, '').replace(/[()]/g, '');
 
-    // Разбиваем по || (OR)
     const orParts = cond.split('||');
 
     return orParts.some(part => {
-        // Разбиваем по && (AND)
         const andParts = part.split('&&');
         return andParts.every(expr => _evalExpr(expr, config));
     });
