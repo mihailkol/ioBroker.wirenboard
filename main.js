@@ -1,5 +1,11 @@
 'use strict';
 
+// ─── Служебные имена каналов (не опрашиваем) ────────────────────────────────────
+const SYSTEM_CHANNEL_NAMES = new Set(['Serial', 'Uptime', 'FW Version', 'HW Batch Number',
+    'MCU Temperature', 'MCU Voltage', 'Supply Voltage', 'Minimum Voltage Since Startup',
+    'Minimum MCU Voltage Since Startup', 'Internal Temperature', '5V Output',
+    'Internal 5V Bus Voltage', 'AVCC Reference']);
+
 const utils          = require('@iobroker/adapter-core');
 const path           = require('path');
 const DeviceManager  = require('./lib/device-manager');
@@ -85,17 +91,51 @@ class Wirenboard extends utils.Adapter {
             host:            gw.host,
             port:            gw.port,
             pollInterval:    gw.pollInterval    || this.config.pollInterval    || 10000,
+            fastPollInterval: this.config.fastPollInterval || 500,
             requestTimeout:  this.config.requestTimeout || 3000,
             devices:         gwDevices,
 
             onDeviceReady: async (deviceState) => {
                 this.log.debug(`Device ready: ${deviceState.deviceId}`);
                 try {
-                    await this._objManager.createDeviceObjects(deviceState);
+                    // Создаём базовые объекты устройства
+                    await this._objManager.ensureDeviceChannel({
+                        deviceId:   deviceState.deviceId,
+                        name:       deviceState.name,
+                        deviceType: deviceState.deviceType,
+                        slaveId:    deviceState.slaveId,
+                    });
+
+                    // Сохраняем серийный номер
+                    if (deviceState.serial) {
+                        await this.setStateAsync(`${deviceState.deviceId}.info.serial`, deviceState.serial, true);
+                    }
+
+                    // Читаем сохранённую конфигурацию из ioBroker
+                    const savedConfig = await this._loadDeviceConfig(deviceState.deviceId);
+
+                    if (savedConfig && Object.keys(savedConfig).length > 0) {
+                        // Есть сохранённая конфигурация — применяем её
+                        this.log.info(`${deviceState.deviceId}: applying saved config`);
+                        await this._applyConfig(deviceState, savedConfig, mgr);
+                    } else {
+                        const seen = new Set();
+                        const defaultConfig = {};
+                        for (const p of deviceState.template.parameters.filter(p => p.isConfig)) {
+                            if (!seen.has(p.address)) {
+                                seen.add(p.address);
+                                defaultConfig[p.id] = -1;
+                            }
+                        }
+                        await this._saveDeviceConfig(deviceState.deviceId, defaultConfig);
+                        this.log.info(`${deviceState.deviceId}: new device, configure in tab`);
+                    }
+
                     // Регистрируем writable каналы для подписки
                     this._registerWritable(deviceState, mgr);
                 } catch (e) {
-                    this.log.error(`createDeviceObjects error (${deviceState.deviceId}): ${e.message}`);
+                    this.log.error(`onDeviceReady error (${deviceState.deviceId}): ${e.message}
+${e.stack}`);
                 }
             },
 
@@ -125,8 +165,9 @@ class Wirenboard extends utils.Adapter {
             await this._objManager.ensureDeviceChannel(dev);
         }
 
-        await mgr.start();
         this._managers.push(mgr);
+        await mgr.start();
+
     }
 
     // ─── Writable states ──────────────────────────────────────────────────────
@@ -237,6 +278,53 @@ class Wirenboard extends utils.Adapter {
                 break;
             }
 
+            case 'applyConfig': {
+                // Применить конфигурацию устройства
+                const { deviceId, config } = obj.message || {};
+                const deviceState = this._findDeviceState(deviceId);
+                if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
+                const mgr = this._findManager(deviceId);
+                if (!mgr) { respond({ error: `Manager for ${deviceId} not found` }); return; }
+                try {
+                    await this._applyConfig(deviceState, config, mgr);
+                    await this._saveDeviceConfig(deviceId, config);
+                    respond({ result: 'ok' });
+                } catch (e) {
+                    respond({ error: e.message });
+                }
+                break;
+            }
+
+            case 'getDeviceInfo': {
+                // Получить информацию об устройстве для таба
+                const { deviceId } = obj.message || {};
+                const deviceState = this._findDeviceState(deviceId);
+                if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
+                const savedConfig = await this._loadDeviceConfig(deviceId);
+                respond({
+                    result: {
+                        deviceId,
+                        name:         deviceState.name,
+                        deviceType:   deviceState.deviceType,
+                        connected:    deviceState.connected,
+                        serial:       deviceState.serial,
+                        hardwareConfig: deviceState.deviceConfig,
+                        savedConfig:  savedConfig || {},
+                        configParams: deviceState.template.parameters
+                            .filter(p => p.isConfig)
+                            .filter((p, i, arr) => arr.findIndex(x => x.address === p.address) === i)
+                            .map(p => ({
+                                id:       p.id,
+                                name:     p.name,
+                                address:  p.address,
+                                states:   p.states,
+                                defaultVal: p.defaultVal,
+                            })),
+                    },
+                });
+                break;
+            }
+
             default:
                 respond({ error: `Unknown command: ${obj.command}` });
         }
@@ -273,6 +361,123 @@ class Wirenboard extends utils.Adapter {
         return result;
     }
 
+    // ─── Конфигурация устройств ──────────────────────────────────────────────────
+
+    async _loadDeviceConfig(deviceId) {
+        try {
+            const state = await this.getStateAsync(`${deviceId}.config`);
+            if (state && state.val) {
+                return typeof state.val === 'string' ? JSON.parse(state.val) : state.val;
+            }
+        } catch (_) {}
+        return null;
+    }
+
+    async _saveDeviceConfig(deviceId, config) {
+        // Создаём объект если нет
+        await this.setObjectNotExistsAsync(`${deviceId}.config`, {
+            type:   'state',
+            common: {
+                name:  'Device configuration',
+                type:  'json',
+                role:  'config',
+                read:  true,
+                write: true,
+            },
+            native: {},
+        });
+        await this.setStateAsync(`${deviceId}.config`, JSON.stringify(config), true);
+    }
+
+    /**
+     * Применяет конфигурацию к устройству:
+     * 1. Записывает конфиг-параметры в holding-регистры устройства
+     * 2. Создаёт ioBroker-объекты для каналов которые активны в данной конфигурации
+     * 3. Обновляет список каналов для поллинга
+     */
+    async _applyConfig(deviceState, config, mgr) {
+        const { deviceId, template, slaveId } = deviceState;
+
+        // 1. Записываем в регистры устройства
+        for (const [paramId, value] of Object.entries(config)) {
+            const param = template.parameters.find(p => p.id === paramId && p.isConfig);
+            if (!param) continue;
+            try {
+                await mgr.client.writeHolding(slaveId, param.address, value & 0xFFFF);
+                this.log.debug(`${deviceId}: wrote ${paramId}=${value} to 0x${param.address.toString(16)}`);
+            } catch (e) {
+                this.log.warn(`${deviceId}: failed to write ${paramId}: ${e.message}`);
+            }
+        }
+
+        // 2. Определяем активные каналы на основе конфига
+        deviceState.deviceConfig = config;
+        const activeChannels = this._resolveActiveChannels(template, config);
+
+        // 3. Создаём объекты для активных каналов
+        await this._objManager.createChannelObjects(deviceId, activeChannels);
+
+        // 4. Обновляем каналы поллинга
+        deviceState.channels = activeChannels.map(ch => ({ ...ch, slaveId }));
+
+        this.log.info(`${deviceId}: config applied, ${activeChannels.length} active channels`);
+    }
+
+    /**
+     * Определяет какие каналы активны при данной конфигурации.
+     * Разбирает condition строки из шаблона.
+     */
+    _resolveActiveChannels(template, config) {
+        return template.channels.filter(ch => {
+            if (ch.enabled === false) return false;
+            if (ch.role === 'button') return false;
+            if (ch.regType === 'coil') return false;
+            if (ch.regType === 'press_counter') return false;
+            if (ch.format === 'string') return false;
+            if (ch.role === 'text') return false;
+            if (ch.id && ch.id.startsWith('bus') && ch.address >= 1536 && ch.address <= 3900) return false;
+            if (ch.format === 'u64' && ch.regType !== 'input') return false;
+            if (ch.id && SYSTEM_CHANNEL_NAMES && SYSTEM_CHANNEL_NAMES.has(ch.name)) return false;
+
+            // Если вход помечен как неактивен (-1) — пропускаем его каналы
+            if (ch.condition) {
+                const inMatch = ch.condition.match(/in(\d+)_mode/);
+                if (inMatch) {
+                    const inNum = inMatch[1];
+                    if (config[`in${inNum}_mode`] === -1) return false;
+                }
+            }
+
+            if (!ch.condition) return true;
+
+            // Простой evaluator для condition вида "in1_mode==0"
+            try {
+                return _evalCondition(ch.condition, config);
+            } catch (_) {
+                return true; // если не можем разобрать — включаем
+            }
+        });
+    }
+
+    _findDeviceState(deviceId) {
+        this.log.info(`findDeviceState: looking for "${deviceId}", managers=${this._managers.length}`);
+        for (const mgr of this._managers) {
+            const devs = mgr.getAllDevices();
+            this.log.info(`findDeviceState: manager has ${devs.length} devices: ${devs.map(d => d.deviceId).join(', ')}`);
+            for (const dev of devs) {
+                if (dev.deviceId === deviceId) return dev;
+            }
+        }
+        return null;
+    }
+
+    _findManager(deviceId) {
+        for (const mgr of this._managers) {
+            if (mgr.getAllDevices().some(d => d.deviceId === deviceId)) return mgr;
+        }
+        return null;
+    }
+
     async _updateGlobalConnection() {
         const anyOnline = this._managers.some(m =>
             m.getAllDevices().some(d => d.connected)
@@ -303,6 +508,75 @@ async function _writeChannel(ch, slaveId, value, client) {
     if (raw < 0) raw = raw + 0x10000;
 
     await client.writeHolding(sid, ch.address, raw & 0xFFFF);
+}
+
+
+// ─── Простой evaluator для WB condition-строк ────────────────────────────────────
+/**
+ * Разбирает условия вида:
+ *   "in1_mode==0"
+ *   "in1_mode==1"
+ *   "in1_mode==0||in2_mode==0"
+ *   "isDefined(in1_mode)==0||in1_mode==0"
+ *
+ * @param {string} condition
+ * @param {object} config  { paramId: value }
+ * @returns {boolean}
+ */
+function _evalCondition(condition, config) {
+    if (!condition) return true;
+
+    // Убираем пробелы и переносы
+    const cond = condition.replace(/\s+/g, '');
+
+    // Разбиваем по || (OR)
+    const orParts = cond.split('||');
+
+    return orParts.some(part => {
+        // Разбиваем по && (AND)
+        const andParts = part.split('&&');
+        return andParts.every(expr => _evalExpr(expr, config));
+    });
+}
+
+function _evalExpr(expr, config) {
+    // isDefined(x)==0 → x не определён или равен 0
+    const isDefinedMatch = expr.match(/^isDefined\((\w+)\)==(\d+)$/);
+    if (isDefinedMatch) {
+        const [, name, val] = isDefinedMatch;
+        const defined = config[name] !== undefined ? 1 : 0;
+        return defined === parseInt(val);
+    }
+
+    // x==val
+    const eqMatch = expr.match(/^(\w+)==(-?\d+)$/);
+    if (eqMatch) {
+        const [, name, val] = eqMatch;
+        return Number(config[name]) === parseInt(val);
+    }
+
+    // x!=val
+    const neqMatch = expr.match(/^(\w+)!=(-?\d+)$/);
+    if (neqMatch) {
+        const [, name, val] = neqMatch;
+        return Number(config[name]) !== parseInt(val);
+    }
+
+    // x>=val
+    const gteMatch = expr.match(/^(\w+)>=(-?\d+)$/);
+    if (gteMatch) {
+        const [, name, val] = gteMatch;
+        return Number(config[name]) >= parseInt(val);
+    }
+
+    // x<=val
+    const lteMatch = expr.match(/^(\w+)<=(-?\d+)$/);
+    if (lteMatch) {
+        const [, name, val] = lteMatch;
+        return Number(config[name]) <= parseInt(val);
+    }
+
+    return true; // неизвестное выражение — пропускаем
 }
 
 // ─── Безопасный ID устройства ─────────────────────────────────────────────────

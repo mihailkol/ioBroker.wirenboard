@@ -67,8 +67,15 @@
         "connectionType": "local",
         "dataSource": "poll",
         "adminUI": {
-            "config": "json"
+            "config": "json",
+            "tab": "html"
         },
+        "adminTab": {
+            "name": "Wiren Board",
+            "singleton": true,
+            "link": ""
+        },
+        "messagebox": true,
         "eraseOnUpload": true,
         "dependencies": [
             {

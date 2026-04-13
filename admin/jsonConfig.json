@@ -54,6 +54,13 @@
             "label": "Параметры",
             "items": {
                 "pollInterval":      { "type": "number", "label": "Интервал опроса (мс)",         "default": 10000, "min": 1000, "max": 60000 },
+                "fastPollInterval": {
+                    "type": "number",
+                    "label": "Быстрый опрос (мс, для кнопок)",
+                    "default": 500,
+                    "min": 100,
+                    "max": 2000
+                },
                 "requestTimeout":    { "type": "number", "label": "Таймаут Modbus (мс)",           "default": 3000,  "min": 500,  "max": 10000 },
                 "reconnectInterval": { "type": "number", "label": "Интервал переподключения (мс)", "default": 5000,  "min": 1000, "max": 60000 }
             }
