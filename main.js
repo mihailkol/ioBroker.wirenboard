@@ -128,7 +128,7 @@ class Wirenboard extends utils.Adapter {
                     if (savedConfig && Object.keys(savedConfig).length > 0) {
                         // Есть сохранённая конфигурация — применяем её
                         this.log.info(`${deviceState.deviceId}: applying saved config`);
-                        await this._applyConfig(deviceState, savedConfig, mgr);
+                        await this._applyConfig(deviceState, savedConfig, mgr, false);
                     } else {
                         const seen = new Set();
                         const defaultConfig = {};
@@ -176,8 +176,17 @@ ${e.stack}`);
             await this._objManager.ensureDeviceChannel(dev);
         }
 
+        this.log.info(`Gateway "${gw.name}": creating objects...`);
+        for (const dev of gwDevices) {
+            await this._objManager.ensureDeviceChannel(dev);
+        }
+        this.log.info(`Gateway "${gw.name}": objects created, pushing manager...`);
         this._managers.push(mgr);
+
+        this._managers.push(mgr);
+        this.log.info(`Gateway "${gw.name}": starting manager...`);
         await mgr.start();
+        this.log.info(`Gateway "${gw.name}": manager started`);
 
     }
 
@@ -231,23 +240,61 @@ ${e.stack}`);
 
         switch (obj.command) {
             case 'scan': {
-                // Сканировать шину указанного шлюза
-                const { gatewayName, from = 1, to = 247 } = obj.message || {};
-                const mgr = this._managers.find(m =>
-                    m.host === obj.message?.host && m.port === obj.message?.port
-                );
-                if (!mgr) {
-                    respond({ error: 'Gateway not found or not connected' });
-                    return;
-                }
+                const { from = 1, to = 247, host, port } = obj.message || {};
+                if (!host || !port) { respond({ error: 'host and port required' }); return; }
+
+                // Создаём отдельный клиент — не мешаем поллингу
+                const ScanClient = require('./lib/modbus-client');
+                const scanClient = new ScanClient({
+                    host, port,
+                    timeout: this.config.requestTimeout || 3000,
+                    logger: () => {},
+                });
+
                 try {
-                    const found = await mgr.scan(from, to, (cur, total) => {
-                        // Прогресс отправляем как промежуточный результат
-                        this.sendTo(obj.from, 'scanProgress', { cur, total }, obj.callback);
-                    });
+                    await scanClient.connect();
+                    const found = [];
+                    for (let id = from; id <= to; id++) {
+                        try {
+                            // Вариант 1: регистр 200, два символа на регистр
+                            let sig = null;
+                            try {
+                                const words = await scanClient.readHolding(id, 200, 8);
+                                let str = '';
+                                for (const w of words) {
+                                    const hi = (w>>8)&0xFF, lo = w&0xFF;
+                                    if (!hi) break;
+                                    str += String.fromCharCode(hi);
+                                    if (!lo) break;
+                                    str += String.fromCharCode(lo);
+                                }
+                                if (str.trim()) sig = str.trim();
+                            } catch(_) {}
+
+                            // Вариант 2: регистр 0, один символ в младшем байте (MAP3E)
+                            if (!sig) {
+                                try {
+                                    const words = await scanClient.readHolding(id, 0, 12);
+                                    let str = '';
+                                    for (let i = 2; i < words.length; i++) {
+                                        const lo = words[i] & 0xFF;
+                                        if (!lo) break;
+                                        str += String.fromCharCode(lo);
+                                    }
+                                    if (str.trim()) sig = str.trim();
+                                } catch(_) {}
+                            }
+
+                            if (sig) found.push({ slaveId: id, signature: sig });
+                        } catch(_) {}
+
+                        await new Promise(r => setTimeout(r, 200));
+                    }
                     respond({ result: found });
-                } catch (e) {
+                } catch(e) {
                     respond({ error: e.message });
+                } finally {
+                    await scanClient.disconnect();
                 }
                 break;
             }
@@ -307,7 +354,6 @@ ${e.stack}`);
             }
 
             case 'getDeviceInfo': {
-                // Получить информацию об устройстве для таба
                 const { deviceId } = obj.message || {};
                 const deviceState = this._findDeviceState(deviceId);
                 if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
@@ -321,18 +367,46 @@ ${e.stack}`);
                         serial:       deviceState.serial,
                         hardwareConfig: deviceState.deviceConfig,
                         savedConfig:  savedConfig || {},
+                        // Все варианты конфиг-параметров с conditions
                         configParams: deviceState.template.parameters
                             .filter(p => p.isConfig)
-                            .filter((p, i, arr) => arr.findIndex(x => x.address === p.address) === i)
                             .map(p => ({
-                                id:       p.id,
-                                name:     p.name,
-                                address:  p.address,
-                                states:   p.states,
+                                id:         p.id,
+                                name:       p.name,
+                                address:    p.address,
+                                states:     p.states,
+                                condition:  p.condition,
                                 defaultVal: p.defaultVal,
                             })),
                     },
                 });
+                break;
+            }
+
+            case 'getConfig': {
+                respond({ result: {
+                    gateways: this.config.gateways || [],
+                    devices:  this.config.devices  || [],
+                }});
+                break;
+            }
+
+            case 'saveConfig': {
+                const { gateways, devices } = obj.message || {};
+                try {
+                    await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {
+                        native: { gateways, devices }
+                    });
+                    respond({ result: 'ok' });
+                } catch (e) {
+                    respond({ error: e.message });
+                }
+                break;
+            }
+
+            case 'restart': {
+                respond({ result: 'ok' });
+                setTimeout(() => this.restart(), 500);
                 break;
             }
 
@@ -407,24 +481,28 @@ ${e.stack}`);
      * 3. Обновляет список каналов для поллинга
      */
 
-    async _applyConfig(deviceState, config, mgr) {
+    async _applyConfig(deviceState, config, mgr, writeToDevice = true) {
         const { deviceId, template, slaveId } = deviceState;
 
-        // 1. Записываем в регистры устройства
-        for (const [paramId, value] of Object.entries(config)) {
-            const param = template.parameters.find(p => p.id === paramId && p.isConfig);
-            if (!param) continue;
-            try {
-                await mgr.client.writeHolding(slaveId, param.address, value & 0xFFFF);
-                this.log.debug(`${deviceId}: wrote ${paramId}=${value} to 0x${param.address.toString(16)}`);
-            } catch (e) {
-                this.log.warn(`${deviceId}: failed to write ${paramId}: ${e.message}`);
+        // 1. Записываем в регистры только если явно запрошено и устройство онлайн
+        if (writeToDevice && deviceState.connected) {
+            for (const [paramId, value] of Object.entries(config)) {
+                if (value === -1) continue;
+                const param = template.parameters.find(p => p.id === paramId && p.isConfig);
+                if (!param) continue;
+                try {
+                    await mgr.client.writeHolding(slaveId, param.address, value & 0xFFFF);
+                } catch (e) {
+                    this.log.warn(`${deviceId}: failed to write ${paramId}: ${e.message}`);
+                }
             }
         }
 
         // 2. Определяем активные каналы на основе конфига
+        this.log.info(`${deviceId}: resolving channels...`);
         deviceState.deviceConfig = config;
         const activeChannels = this._resolveActiveChannels(template, config);
+        this.log.info(`${deviceId}: ${activeChannels.length} channels, cleaning old objects...`);
 
         // 2.5. Удаляем старые объекты каналов
         try {

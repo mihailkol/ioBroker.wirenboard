@@ -6,791 +6,625 @@
 <title>Wiren Board</title>
 <style>
 * { box-sizing: border-box; margin: 0; padding: 0; }
-
 :root {
-    --bg:        #f0f2f5;
-    --surface:   #ffffff;
-    --surface2:  #f8f9fb;
-    --border:    #e2e6ea;
-    --accent:    #1a6fc4;
-    --accent-h:  #1558a0;
-    --text:      #1a1d23;
-    --text2:     #6b7280;
-    --green:     #16a34a;
-    --red:       #dc2626;
-    --amber:     #d97706;
-    --radius:    8px;
-    --shadow:    0 1px 3px rgba(0,0,0,.08), 0 1px 2px rgba(0,0,0,.06);
+    --bg:#f0f2f5; --surface:#fff; --surface2:#f8f9fb; --border:#e2e6ea;
+    --accent:#1a6fc4; --accent-h:#1558a0; --text:#1a1d23; --text2:#6b7280;
+    --green:#16a34a; --red:#dc2626; --radius:8px; --shadow:0 1px 3px rgba(0,0,0,.08);
 }
-
-body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-    font-size: 13px;
-    background: var(--bg);
-    color: var(--text);
-    line-height: 1.5;
-    height: 100%;
-    overflow: hidden;
-    margin: 0;
-    padding: 0;
-}
-
-/* ── Layout ─────────────────────────────────────────────────────────── */
-.layout {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    grid-template-rows: 48px 1fr;
-    height: 100%;
-    overflow: hidden;
-}
-
-/* ── Header ─────────────────────────────────────────────────────────── */
-.header {
-    grid-column: 1 / -1;
-    background: var(--accent);
-    color: #fff;
-    display: flex;
-    align-items: center;
-    padding: 0 16px;
-    gap: 10px;
-    box-shadow: 0 2px 4px rgba(0,0,0,.15);
-}
-.header-title { font-size: 15px; font-weight: 600; flex: 1; }
-.header-status { font-size: 12px; opacity: .75; }
-
-/* ── Sidebar ─────────────────────────────────────────────────────────── */
-.sidebar {
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    overflow-y: auto;
-    height: 100%;
-    min-height: 0;
-    padding: 12px 0;
-}
-.sidebar-section { padding: 0 12px 8px; }
-.sidebar-label {
-    font-size: 10px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: .08em;
-    color: var(--text2);
-    padding: 8px 4px 4px;
-}
-
-.device-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 8px 10px;
-    border-radius: var(--radius);
-    cursor: pointer;
-    transition: background .12s;
-    margin: 1px 0;
-}
-.device-item:hover { background: var(--surface2); }
-.device-item.active { background: #e8f0fb; }
-.device-item.active .device-name { color: var(--accent); font-weight: 600; }
-
-.dot {
-    width: 8px; height: 8px;
-    border-radius: 50%;
-    flex-shrink: 0;
-}
-.dot.online  { background: var(--green); box-shadow: 0 0 0 2px #dcfce7; }
-.dot.offline { background: var(--red);   box-shadow: 0 0 0 2px #fee2e2; }
-
-.device-name  { font-size: 13px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.device-type  { font-size: 11px; color: var(--text2); }
-
-/* ── Main ─────────────────────────────────────────────────────────────── */
-.main {
-    overflow-y: auto;
-    height: 100%;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.empty-state {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    color: var(--text2);
-    gap: 8px;
-}
-.empty-state svg { opacity: .3; }
-
-/* ── Card ─────────────────────────────────────────────────────────────── */
-.card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    box-shadow: var(--shadow);
-    overflow: hidden;
-}
-.card-header {
-    padding: 12px 16px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    background: var(--surface2);
-}
-.card-title { font-size: 13px; font-weight: 600; flex: 1; }
-.card-body  { padding: 16px; }
-
-/* ── Info grid ───────────────────────────────────────────────────────── */
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-    gap: 8px;
-}
-.info-item {}
-.info-key   { font-size: 11px; color: var(--text2); }
-.info-val   { font-size: 13px; font-weight: 500; margin-top: 1px; }
-
-/* ── Config form ─────────────────────────────────────────────────────── */
-.config-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
-    gap: 12px;
-}
-.field {}
-.field-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
-.field select, .field input[type=number] {
-    width: 100%;
-    padding: 6px 10px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    background: var(--surface);
-    color: var(--text);
-    outline: none;
-    transition: border-color .15s;
-}
-.field select:focus, .field input[type=number]:focus {
-    border-color: var(--accent);
-}
-
-/* сенсоры-счётчик */
-.sensors-field {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    margin-top: 4px;
-}
-.sensors-field input {
-    width: 64px;
-    padding: 6px 8px;
-    border: 1px solid var(--border);
-    border-radius: 6px;
-    font-size: 13px;
-    text-align: center;
-}
-.sensors-field label { font-size: 12px; color: var(--text2); }
-
-.btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 7px 16px;
-    border: none;
-    border-radius: 6px;
-    font-size: 13px;
-    font-weight: 500;
-    cursor: pointer;
-    transition: background .12s, opacity .12s;
-}
-.btn:disabled { opacity: .5; cursor: not-allowed; }
-.btn-primary { background: var(--accent); color: #fff; }
-.btn-primary:hover:not(:disabled) { background: var(--accent-h); }
-.btn-ghost   { background: transparent; color: var(--text2); border: 1px solid var(--border); }
-.btn-ghost:hover:not(:disabled) { background: var(--surface2); }
-
-/* ── Values table ─────────────────────────────────────────────────────── */
-.values-table { width: 100%; border-collapse: collapse; }
-.values-table th {
-    text-align: left;
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: .06em;
-    color: var(--text2);
-    padding: 6px 12px;
-    border-bottom: 2px solid var(--border);
-    background: var(--surface2);
-}
-.values-table td {
-    padding: 7px 12px;
-    border-bottom: 1px solid var(--border);
-    font-size: 13px;
-}
-.values-table tr:last-child td { border-bottom: none; }
-.values-table tr:hover td { background: var(--surface2); }
-
-.val-number { font-variant-numeric: tabular-nums; color: var(--accent); font-weight: 500; }
-.val-bool-on  { color: var(--green); font-weight: 600; }
-.val-bool-off { color: var(--text2); }
-.val-null     { color: var(--text2); font-style: italic; }
-.val-error    { color: var(--red); }
-
-/* ── Toast ───────────────────────────────────────────────────────────── */
-.toast {
-    position: fixed;
-    bottom: 20px; right: 20px;
-    padding: 10px 16px;
-    border-radius: 6px;
-    font-size: 13px;
-    color: #fff;
-    background: #1a1d23;
-    opacity: 0;
-    transform: translateY(8px);
-    transition: opacity .2s, transform .2s;
-    z-index: 1000;
-    pointer-events: none;
-}
-.toast.show { opacity: 1; transform: translateY(0); }
-.toast.success { background: var(--green); }
-.toast.error   { background: var(--red); }
-
-.spinner {
-    width: 16px; height: 16px;
-    border: 2px solid rgba(255,255,255,.3);
-    border-top-color: #fff;
-    border-radius: 50%;
-    animation: spin .7s linear infinite;
-    display: inline-block;
-}
-@keyframes spin { to { transform: rotate(360deg); } }
-
-.badge {
-    display: inline-block;
-    padding: 1px 7px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: 600;
-}
-.badge-online  { background: #dcfce7; color: #15803d; }
-.badge-offline { background: #fee2e2; color: #b91c1c; }
-
-/* Принудительный скролл для работы внутри ioBroker Admin iframe */
-html {
-    overflow-y: auto !important;
-    height: auto !important;
-}
-
-body {
-    overflow-y: auto !important;
-    height: auto !important;
-    min-height: 100vh;
-}
-
-.layout {
-    display: grid;
-    grid-template-columns: 240px 1fr;
-    grid-template-rows: 48px auto;
-    min-height: 100vh;
-    overflow: visible;
-}
-
-.main {
-    overflow-y: visible;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.sidebar {
-    overflow-y: auto;
-}
-
+html,body { height:auto; min-height:100vh; overflow-y:auto;
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
+    font-size:13px; background:var(--bg); color:var(--text); line-height:1.5; }
+.header { background:var(--accent); color:#fff; display:flex; align-items:center;
+    padding:0 16px; height:48px; gap:10px; box-shadow:0 2px 4px rgba(0,0,0,.15);
+    position:sticky; top:0; z-index:100; }
+.header-title { font-size:15px; font-weight:600; flex:1; }
+.header-status { font-size:12px; opacity:.75; }
+.layout { display:grid; grid-template-columns:220px 260px 1fr; min-height:calc(100vh - 48px); }
+.panel { border-right:1px solid var(--border); background:var(--surface); display:flex; flex-direction:column; }
+.panel-header { padding:10px 12px; border-bottom:1px solid var(--border); background:var(--surface2);
+    display:flex; align-items:center; gap:8px; }
+.panel-title { font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--text2); flex:1; }
+.panel-body { flex:1; overflow-y:auto; padding:8px 0; }
+.list-item { display:flex; align-items:center; gap:8px; padding:8px 12px; cursor:pointer; transition:background .1s; }
+.list-item:hover { background:var(--surface2); }
+.list-item.active { background:#e8f0fb; }
+.list-item.active .item-name { color:var(--accent); font-weight:600; }
+.item-name { font-size:13px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.item-sub  { font-size:11px; color:var(--text2); margin-top:1px; }
+.dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.dot.online  { background:var(--green); box-shadow:0 0 0 2px #dcfce7; }
+.dot.offline { background:var(--red);   box-shadow:0 0 0 2px #fee2e2; }
+.dot.unknown { background:#d1d5db; }
+.main { padding:16px; overflow-y:auto; display:flex; flex-direction:column; gap:12px; }
+.card { background:var(--surface); border:1px solid var(--border); border-radius:var(--radius); box-shadow:var(--shadow); overflow:hidden; }
+.card-header { padding:10px 14px; border-bottom:1px solid var(--border); background:var(--surface2);
+    display:flex; align-items:center; gap:8px; }
+.card-title { font-size:13px; font-weight:600; flex:1; }
+.card-body  { padding:14px; }
+.form-row { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+.form-row:last-child { margin-bottom:0; }
+.form-label { font-size:12px; color:var(--text2); width:130px; flex-shrink:0; }
+.form-row input,.form-row select { flex:1; padding:6px 10px; border:1px solid var(--border);
+    border-radius:6px; font-size:13px; background:var(--surface); color:var(--text); outline:none; }
+.form-row input:focus,.form-row select:focus { border-color:var(--accent); }
+.form-row input[type=checkbox] { flex:none; width:16px; height:16px; }
+.btn { display:inline-flex; align-items:center; gap:5px; padding:6px 14px; border:none;
+    border-radius:6px; font-size:12px; font-weight:500; cursor:pointer;
+    transition:background .12s,opacity .12s; white-space:nowrap; }
+.btn:disabled { opacity:.5; cursor:not-allowed; }
+.btn-primary { background:var(--accent); color:#fff; }
+.btn-primary:hover:not(:disabled) { background:var(--accent-h); }
+.btn-danger  { background:var(--red); color:#fff; }
+.btn-danger:hover:not(:disabled) { background:#b91c1c; }
+.btn-ghost   { background:transparent; color:var(--text2); border:1px solid var(--border); }
+.btn-ghost:hover:not(:disabled) { background:var(--surface2); }
+.btn-sm { padding:4px 10px; font-size:12px; }
+.btn-icon { padding:4px 8px; }
+.btn-group { display:flex; gap:6px; flex-wrap:wrap; }
+.config-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(200px,1fr)); gap:10px; }
+.config-group { border:1px solid var(--border); border-radius:6px; padding:10px; }
+.config-group-title { font-size:11px; font-weight:700; text-transform:uppercase;
+    letter-spacing:.05em; color:var(--text2); margin-bottom:8px; }
+.field { margin-bottom:8px; }
+.field:last-child { margin-bottom:0; }
+.field-label { font-size:11px; color:var(--text2); margin-bottom:3px; }
+.field select,.field input[type=number] { width:100%; padding:5px 8px; border:1px solid var(--border);
+    border-radius:5px; font-size:12px; background:var(--surface); color:var(--text); outline:none; }
+.field select:focus { border-color:var(--accent); }
+.field select:disabled { background:#f5f5f5; color:#aaa; }
+.values-table { width:100%; border-collapse:collapse; }
+.values-table th { text-align:left; font-size:11px; font-weight:600; text-transform:uppercase;
+    letter-spacing:.06em; color:var(--text2); padding:6px 12px;
+    border-bottom:2px solid var(--border); background:var(--surface2); }
+.values-table td { padding:6px 12px; border-bottom:1px solid var(--border); font-size:12px; }
+.values-table tr:last-child td { border-bottom:none; }
+.values-table tr:hover td { background:var(--surface2); }
+.val-number { font-variant-numeric:tabular-nums; color:var(--accent); font-weight:500; }
+.val-bool-on  { color:var(--green); font-weight:600; }
+.val-bool-off { color:var(--text2); }
+.val-null     { color:var(--text2); font-style:italic; }
+.scan-item { display:flex; align-items:center; gap:8px; padding:8px 12px; border-bottom:1px solid var(--border); }
+.scan-item:last-child { border-bottom:none; }
+.scan-badge { display:inline-block; padding:2px 8px; border-radius:10px; font-size:11px; font-weight:600; }
+.badge-known   { background:#dcfce7; color:#15803d; }
+.badge-unknown { background:#fef3c7; color:#92400e; }
+.badge-exists  { background:#e0e7ff; color:#3730a3; }
+.info-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px; }
+.info-key { font-size:11px; color:var(--text2); }
+.info-val { font-size:13px; font-weight:500; margin-top:1px; }
+.toast { position:fixed; bottom:20px; right:20px; padding:10px 16px; border-radius:6px;
+    font-size:13px; color:#fff; background:#1a1d23; opacity:0; transform:translateY(8px);
+    transition:opacity .2s,transform .2s; z-index:1000; pointer-events:none; }
+.toast.show { opacity:1; transform:translateY(0); }
+.toast.success { background:var(--green); }
+.toast.error   { background:var(--red); }
+.spinner { width:14px; height:14px; border:2px solid rgba(255,255,255,.3); border-top-color:#fff;
+    border-radius:50%; animation:spin .7s linear infinite; display:inline-block; }
+@keyframes spin { to { transform:rotate(360deg); } }
+.empty { padding:24px; text-align:center; color:var(--text2); font-size:12px; }
+.progress-bar { height:4px; background:var(--border); border-radius:2px; overflow:hidden; margin:8px 0; }
+.progress-fill { height:100%; background:var(--accent); border-radius:2px; transition:width .3s; }
+.sensors-row { display:flex; align-items:center; gap:6px; margin-top:4px; }
+.sensors-row input { width:60px; padding:4px 6px; border:1px solid var(--border); border-radius:5px; font-size:12px; text-align:center; }
+.sensors-row label { font-size:11px; color:var(--text2); }
 </style>
 </head>
 <body>
 
+<div class="header">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="white"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+    <span class="header-title">Wiren Board RS485</span>
+    <span class="header-status" id="headerStatus">Подключение...</span>
+</div>
+
 <div class="layout">
-    <header class="header">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
-        </svg>
-        <span class="header-title">Wiren Board RS485</span>
-        <span class="header-status" id="headerStatus">Подключение...</span>
-    </header>
-
-    <nav class="sidebar">
-        <div class="sidebar-section">
-            <div class="sidebar-label">Устройства</div>
-            <div id="deviceList">
-                <div style="padding:12px;color:var(--text2);font-size:12px">Загрузка...</div>
-            </div>
+    <div class="panel">
+        <div class="panel-header">
+            <span class="panel-title">Шлюзы</span>
+            <button class="btn btn-primary btn-sm btn-icon" onclick="showGatewayForm(null)" title="Добавить">+</button>
         </div>
-    </nav>
-
-    <main class="main" id="mainContent">
-        <div class="empty-state">
-            <svg width="48" height="48" viewBox="0 0 24 24" fill="currentColor">
-                <path d="M19 11H7.83l4.88-4.88c.39-.39.39-1.03 0-1.42-.39-.39-1.02-.39-1.41 0l-6.59 6.59c-.39.39-.39 1.02 0 1.41l6.59 6.59c.39.39 1.02.39 1.41 0 .39-.39.39-1.02 0-1.41L7.83 13H19c.55 0 1-.45 1-1s-.45-1-1-1z"/>
-            </svg>
-            <span>Выберите устройство</span>
+        <div class="panel-body" id="gatewayList"><div class="empty">Загрузка...</div></div>
+    </div>
+    <div class="panel">
+        <div class="panel-header">
+            <span class="panel-title" id="devicesTitle">Устройства</span>
+            <button class="btn btn-primary btn-sm btn-icon" onclick="showDeviceForm(null)" title="Добавить" id="btnAddDevice" style="display:none">+</button>
         </div>
-    </main>
+        <div class="panel-body" id="deviceList"><div class="empty">Выберите шлюз</div></div>
+    </div>
+    <div class="main" id="mainContent">
+        <div class="empty" style="margin-top:40px">Выберите устройство</div>
+    </div>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
 'use strict';
+let socket=null, namespace='wirenboard.0', adapterConfig={gateways:[],devices:[]};
+let selectedGateway=null, selectedDeviceId=null, deviceInfo=null;
+let liveStates={}, subscriptions=new Set();
 
-// ── Состояние ──────────────────────────────────────────────────────────
-let socket = null;
-let namespace = 'wirenboard.0';
-let devices = [];          // список устройств из config
-let selectedDeviceId = null;
-let deviceInfo = null;     // getDeviceInfo ответ
-let liveStates = {};       // id → {val, ts}
-let subscribed = false;
-
-// ── Socket.io ──────────────────────────────────────────────────────────
-function initSocket() {
-    const script = document.createElement('script');
-    script.src = '/socket.io/socket.io.js';
-    script.onload = connectSocket;
-    script.onerror = () => showError('Не удалось загрузить socket.io');
-    document.head.appendChild(script);
+function initSocket(){
+    const s=document.createElement('script');
+    s.src='/socket.io/socket.io.js';
+    s.onload=connectSocket;
+    s.onerror=()=>setStatus('Ошибка socket.io');
+    document.head.appendChild(s);
 }
-
-function connectSocket() {
-    const loc = window.location;
-    socket = io.connect(loc.protocol + '//' + loc.hostname + ':' + (loc.port || 8081));
-
-    socket.on('connect', () => {
-        document.getElementById('headerStatus').textContent = 'Подключено';
-        loadDevices();
-    });
-
-    socket.on('disconnect', () => {
-        document.getElementById('headerStatus').textContent = 'Нет связи';
-    });
-
-    socket.on('stateChange', (id, state) => {
-        if (!id.startsWith(namespace)) return;
-        liveStates[id] = state;
-        updateLiveValue(id, state);
+function connectSocket(){
+    const l=window.location;
+    socket=io.connect(l.protocol+'//'+l.hostname+':'+( l.port||8081));
+    socket.on('connect',()=>{setStatus('Подключено');loadAll();});
+    socket.on('disconnect',()=>setStatus('Нет связи'));
+    socket.on('stateChange',(id,state)=>{
+        if(!id.startsWith(namespace))return;
+        liveStates[id]=state;
+        onLiveStateChange(id,state);
     });
 }
-
-function emit(cmd, ...args) {
-    return new Promise((res, rej) => {
-        socket.emit(cmd, ...args, (err, result) => err ? rej(new Error(err)) : res(result));
-    });
+function emit(cmd,...args){
+    return new Promise((res,rej)=>socket.emit(cmd,...args,(err,r)=>err?rej(new Error(err)):res(r)));
+}
+function sendTo(command,message){
+    return new Promise((res,rej)=>socket.emit('sendTo',namespace,command,message,r=>{
+        if(r&&r.error)rej(new Error(r.error));
+        else res(r&&r.result!==undefined?r.result:r);
+    }));
 }
 
-// ── Загрузка конфигурации ──────────────────────────────────────────────
-async function loadDevices() {
-    try {
-        // Читаем native конфиг адаптера
-        const obj = await emit('getObject', `system.adapter.${namespace}`);
-        const native = obj && obj.native || {};
-        devices = (native.devices || []).filter(d => d.enabled !== false);
-
-        renderDeviceList();
-
-        // Читаем текущие connection стейты
-        try {
-            const connKeys = devices.map(d => {
-                const gw = (d.gateway || 'gw').replace(/[^a-zA-Z0-9_]/g, '_');
-                const dn = (d.name || `${d.deviceType}_${d.slaveId}`).replace(/[^a-zA-Z0-9_]/g, '_');
-                return `${namespace}.${gw}_${dn}.info.connection`;
-            });
-            const connStates = await emit('getStates', connKeys);
-            Object.assign(liveStates, connStates || {});
-            renderDeviceList();
-        } catch (_) {} 
-
-        // Подписываемся на connection-стейты
-        await emit('subscribe', `${namespace}.*.info.connection`);
-
-        document.getElementById('headerStatus').textContent =
-            `${devices.length} устройств`;
-    } catch (e) {
-        showError('Ошибка загрузки: ' + e.message);
-    }
+async function loadAll(){
+    try{
+        const cfg=await sendTo('getConfig',{});
+        adapterConfig=cfg||{gateways:[],devices:[]};
+        await emit('subscribe',namespace+'.*.info.connection');
+        const objs=await emit('getObjectView','system','state',{startkey:namespace+'.',endkey:namespace+'.香'});
+        const ck=(objs?.rows||[]).map(r=>r.id).filter(id=>id.endsWith('.info.connection'));
+        if(ck.length){const st=await emit('getStates',ck);Object.assign(liveStates,st||{});}
+        renderGatewayList();
+        setStatus((adapterConfig.gateways?.length||0)+' шлюзов, '+(adapterConfig.devices?.length||0)+' устройств');
+    }catch(e){setStatus('Ошибка: '+e.message);}
 }
 
-// ── Рендер списка устройств ────────────────────────────────────────────
-function renderDeviceList() {
-    const list = document.getElementById('deviceList');
-    if (!devices.length) {
-        list.innerHTML = '<div style="padding:8px 4px;color:var(--text2);font-size:12px">Нет устройств.<br>Добавьте в настройках.</div>';
-        return;
-    }
+function devOnline(gw,d){
+    const gwP=(gw.name||'gw').replace(/[^a-zA-Z0-9_]/g,'_');
+    const dnP=(d.name||d.deviceType+'_'+d.slaveId).replace(/[^a-zA-Z0-9_]/g,'_');
+    return liveStates[namespace+'.'+gwP+'_'+dnP+'.info.connection']?.val;
+}
+function makeDevId(gw,d){
+    const gwP=(gw.name||'gw').replace(/[^a-zA-Z0-9_]/g,'_');
+    const dnP=(d.name||d.deviceType+'_'+d.slaveId).replace(/[^a-zA-Z0-9_]/g,'_');
+    return gwP+'_'+dnP;
+}
 
-    list.innerHTML = devices.map(d => {
-        const gw = (d.gateway || 'gw').replace(/[^a-zA-Z0-9_]/g, '_');
-        const dn = (d.name || `${d.deviceType}_${d.slaveId}`).replace(/[^a-zA-Z0-9_]/g, '_');
-        const deviceId = `${namespace}.${gw}_${dn}`;
-        const connState = liveStates[`${deviceId}.info.connection`];
-        const online = connState && connState.val;
-
-        return `<div class="device-item ${selectedDeviceId === deviceId ? 'active' : ''}"
-                     onclick="selectDevice('${deviceId}', '${d.deviceType}')">
-            <div class="dot ${online ? 'online' : 'offline'}"></div>
-            <div>
-                <div class="device-name">${d.name || d.deviceType}</div>
-                <div class="device-type">${d.deviceType} · ID ${d.slaveId}</div>
-            </div>
+function renderGatewayList(){
+    const list=document.getElementById('gatewayList');
+    const gws=adapterConfig.gateways||[];
+    if(!gws.length){list.innerHTML='<div class="empty">Нет шлюзов.<br>Нажмите + чтобы добавить.</div>';return;}
+    list.innerHTML=gws.map(gw=>{
+        const devs=(adapterConfig.devices||[]).filter(d=>d.gateway===gw.name);
+        const any=devs.some(d=>devOnline(gw,d));
+        const nm=gw.name.replace(/'/g,"\'");
+        return `<div class="list-item ${selectedGateway===gw.name?'active':''}" onclick="selectGateway('${nm}')">
+            <div class="dot ${gw.enabled===false?'unknown':any?'online':'offline'}"></div>
+            <div style="flex:1;min-width:0"><div class="item-name">${gw.name}</div><div class="item-sub">${gw.host}:${gw.port}</div></div>
+            <button class="btn btn-ghost btn-icon btn-sm" onclick="event.stopPropagation();showGatewayForm('${nm}')">✎</button>
         </div>`;
     }).join('');
 }
 
-// ── Выбор устройства ──────────────────────────────────────────────────
-async function selectDevice(deviceId, deviceType) {
-    selectedDeviceId = deviceId;
-    renderDeviceList();
+function selectGateway(name){
+    selectedGateway=name; selectedDeviceId=null;
+    renderGatewayList(); renderDeviceList();
+    document.getElementById('btnAddDevice').style.display='';
+    document.getElementById('devicesTitle').textContent=name;
+    document.getElementById('mainContent').innerHTML='<div class="empty" style="margin-top:40px">Выберите устройство или нажмите "Сканировать"</div>';
+}
 
-    const main = document.getElementById('mainContent');
-    main.innerHTML = '<div class="empty-state"><div class="spinner" style="border-top-color:var(--accent);border-color:var(--border)"></div><span>Загрузка...</span></div>';
+function showGatewayForm(gwName){
+    const gw=gwName?(adapterConfig.gateways||[]).find(g=>g.name===gwName):null;
+    document.getElementById('mainContent').innerHTML=`
+    <div class="card"><div class="card-header"><span class="card-title">${gw?'Редактировать шлюз':'Новый шлюз'}</span></div>
+    <div class="card-body">
+        <div class="form-row"><span class="form-label">Название</span><input id="gw_name" value="${gw?.name||''}"></div>
+        <div class="form-row"><span class="form-label">IP адрес</span><input id="gw_host" value="${gw?.host||''}"></div>
+        <div class="form-row"><span class="form-label">TCP порт</span><input id="gw_port" type="number" value="${gw?.port||23}"></div>
+        <div class="form-row"><span class="form-label">Интервал опроса (мс)</span><input id="gw_poll" type="number" value="${gw?.pollInterval||10000}"></div>
+        <div class="form-row"><span class="form-label">Активен</span><input id="gw_enabled" type="checkbox" ${gw?.enabled!==false?'checked':''} ></div>
+        <div class="btn-group" style="margin-top:12px">
+            <button class="btn btn-primary" onclick="saveGateway('${gwName||''}')">Сохранить</button>
+            ${gw?`<button class="btn btn-danger" onclick="deleteGateway('${gwName}')">Удалить</button>`:''}
+            <button class="btn btn-ghost" onclick="document.getElementById('mainContent').innerHTML=''">Отмена</button>
+        </div>
+    </div></div>`;
+}
 
-    try {
-        // Запрашиваем инфо об устройстве через sendTo
-        console.log('deviceId:', deviceId, 'namespace:', namespace, 'shortId:', deviceId.replace(namespace + '.', ''));
-        const shortId = deviceId.replace(namespace + '.', '');
-        deviceInfo = await sendToAdapter('getDeviceInfo', { deviceId: shortId });
-        // Подписываемся на стейты устройства
-        if (!subscribed) {
-            await emit('subscribe', `${namespace}.${deviceId.replace(namespace + '.', '')}.*`);
-            subscribed = true;
+async function saveGateway(oldName){
+    const name=document.getElementById('gw_name').value.trim();
+    const host=document.getElementById('gw_host').value.trim();
+    const port=parseInt(document.getElementById('gw_port').value);
+    const poll=parseInt(document.getElementById('gw_poll').value);
+    const enabled=document.getElementById('gw_enabled').checked;
+    if(!name||!host){showToast('Заполните название и IP','error');return;}
+    const gws=adapterConfig.gateways||[];
+    const idx=oldName?gws.findIndex(g=>g.name===oldName):-1;
+    const newGw={name,host,port,pollInterval:poll,enabled};
+    if(idx>=0){gws[idx]=newGw;if(oldName!==name)(adapterConfig.devices||[]).forEach(d=>{if(d.gateway===oldName)d.gateway=name;});}
+    else gws.push(newGw);
+    await persistConfig(); renderGatewayList();
+    showToast('Шлюз сохранён. Перезапустите адаптер.','success');
+}
+
+async function deleteGateway(name){
+    if(!confirm(`Удалить шлюз "${name}"?`))return;
+    adapterConfig.gateways=(adapterConfig.gateways||[]).filter(g=>g.name!==name);
+    adapterConfig.devices=(adapterConfig.devices||[]).filter(d=>d.gateway!==name);
+    if(selectedGateway===name){selectedGateway=null;selectedDeviceId=null;}
+    await persistConfig(); renderGatewayList(); renderDeviceList();
+    showToast('Шлюз удалён.','success');
+}
+
+function renderDeviceList(){
+    const list=document.getElementById('deviceList');
+    if(!selectedGateway){list.innerHTML='<div class="empty">Выберите шлюз</div>';return;}
+    const gw=(adapterConfig.gateways||[]).find(g=>g.name===selectedGateway)||{name:selectedGateway};
+    const devs=(adapterConfig.devices||[]).filter(d=>d.gateway===selectedGateway);
+    if(!devs.length){
+        list.innerHTML='<div class="empty">Нет устройств.<br><button class="btn btn-ghost btn-sm" style="margin-top:6px" onclick="startScan()">Сканировать шину</button></div>';
+        return;
+    }
+    list.innerHTML=devs.map(d=>{
+        const devId=makeDevId(gw,d);
+        const online=devOnline(gw,d);
+        const nm=d.name.replace(/'/g,"\'");
+        return `<div class="list-item ${selectedDeviceId===devId?'active':''}" onclick="selectDevice('${devId}')">
+            <div class="dot ${d.enabled===false?'unknown':online?'online':'offline'}"></div>
+            <div style="flex:1;min-width:0"><div class="item-name">${d.name}</div><div class="item-sub">${d.deviceType} · ID ${d.slaveId}</div></div>
+            <button class="btn btn-ghost btn-icon btn-sm" onclick="event.stopPropagation();showDeviceForm('${devId}')">✎</button>
+        </div>`;
+    }).join('')+'<div style="padding:8px 12px;border-top:1px solid var(--border);margin-top:4px"><button class="btn btn-ghost btn-sm" style="width:100%" onclick="startScan()">🔍 Сканировать шину</button></div>';
+}
+
+const DEVICE_TYPES=['WB-MAI6-since-fw-2.2','WB-M1W2-MULTIPLE-W1','WB-MAP3E','WB-MAP12E','WB-MS','WB-MR6C'];
+
+function showDeviceForm(devId){
+    const gw=(adapterConfig.gateways||[]).find(g=>g.name===selectedGateway)||{name:selectedGateway};
+    const dev=devId?(adapterConfig.devices||[]).find(d=>makeDevId(gw,d)===devId):null;
+    const opts=DEVICE_TYPES.map(t=>`<option value="${t}" ${dev?.deviceType===t?'selected':''} >${t}</option>`).join('');
+    document.getElementById('mainContent').innerHTML=`
+    <div class="card"><div class="card-header"><span class="card-title">${dev?'Редактировать':'Новое устройство'}</span></div>
+    <div class="card-body">
+        <div class="form-row"><span class="form-label">Название</span><input id="dev_name" value="${dev?.name||''}"></div>
+        <div class="form-row"><span class="form-label">Slave ID</span><input id="dev_slave" type="number" value="${dev?.slaveId||1}" min="1" max="247"></div>
+        <div class="form-row"><span class="form-label">Тип устройства</span><select id="dev_type">${opts}</select></div>
+        <div class="form-row"><span class="form-label">Активно</span><input id="dev_enabled" type="checkbox" ${dev?.enabled!==false?'checked':''} ></div>
+        <div class="btn-group" style="margin-top:12px">
+            <button class="btn btn-primary" onclick="saveDevice('${devId||''}')">Сохранить</button>
+            ${dev?`<button class="btn btn-danger" onclick="deleteDevice('${devId}')">Удалить</button>`:''}
+            <button class="btn btn-ghost" onclick="renderDeviceList();document.getElementById('mainContent').innerHTML=''">Отмена</button>
+        </div>
+    </div></div>`;
+}
+
+async function saveDevice(oldDevId){
+    const name=document.getElementById('dev_name').value.trim();
+    const slaveId=parseInt(document.getElementById('dev_slave').value);
+    const type=document.getElementById('dev_type').value;
+    const enabled=document.getElementById('dev_enabled').checked;
+    if(!name){showToast('Введите название','error');return;}
+    const gw=(adapterConfig.gateways||[]).find(g=>g.name===selectedGateway)||{name:selectedGateway};
+    const newDev={name,gateway:selectedGateway,slaveId,deviceType:type,enabled};
+    const devs=adapterConfig.devices||(adapterConfig.devices=[]);
+    if(oldDevId){const idx=devs.findIndex(d=>makeDevId(gw,d)===oldDevId);if(idx>=0)devs[idx]=newDev;else devs.push(newDev);}
+    else devs.push(newDev);
+    await persistConfig(); renderDeviceList();
+    showToast('Устройство сохранено. Перезапустите адаптер.','success');
+}
+
+async function deleteDevice(devId){
+    if(!confirm('Удалить устройство?'))return;
+    const gw=(adapterConfig.gateways||[]).find(g=>g.name===selectedGateway)||{name:selectedGateway};
+    adapterConfig.devices=(adapterConfig.devices||[]).filter(d=>makeDevId(gw,d)!==devId);
+    if(selectedDeviceId===devId)selectedDeviceId=null;
+    await persistConfig(); renderDeviceList();
+    showToast('Устройство удалено.','success');
+}
+
+async function selectDevice(devId){
+    selectedDeviceId=devId; renderDeviceList();
+    document.getElementById('mainContent').innerHTML='<div class="empty" style="margin-top:40px"><div class="spinner" style="border-top-color:var(--accent);border-color:var(--border);width:24px;height:24px;border-width:3px"></div></div>';
+    try{
+        deviceInfo=await sendTo('getDeviceInfo',{deviceId:devId});
+        if(!subscriptions.has(devId)){
+            await emit('subscribe',namespace+'.'+devId+'.*');
+            subscriptions.add(devId);
         }
-
-        // Читаем текущие стейты
-        const stateKeys = await getDeviceStateKeys(deviceId);
-        if (stateKeys.length) {
-            const states = await emit('getStates', stateKeys);
-            Object.assign(liveStates, states || {});
-        }
-
-        renderDevice();
-    } catch (e) {
-        main.innerHTML = `<div class="empty-state"><span style="color:var(--red)">${e.message}</span></div>`;
+        const res=await emit('getObjectView','system','state',{startkey:namespace+'.'+devId+'.',endkey:namespace+'.'+devId+'.香'});
+        const keys=(res?.rows||[]).map(r=>r.id);
+        if(keys.length){const st=await emit('getStates',keys);Object.assign(liveStates,st||{});}
+        renderDevicePanel();
+    }catch(e){
+        document.getElementById('mainContent').innerHTML=`<div class="empty" style="color:var(--red)">${e.message}</div>`;
     }
 }
 
-async function getDeviceStateKeys(deviceId) {
-    try {
-        const suffix = deviceId.replace(namespace + '.', '');
-        const result = await emit('getObjectView', 'system', 'state', {
-            startkey: `${namespace}.${suffix}.`,
-            endkey:   `${namespace}.${suffix}.\u9999`,
-        });
-        return (result.rows || []).map(r => r.id);
-    } catch (_) { return []; }
+function renderDevicePanel(){
+    if(!deviceInfo)return;
+    const d=deviceInfo;
+    const connId=namespace+'.'+d.deviceId+'.info.connection';
+    const online=liveStates[connId]?.val;
+    document.getElementById('mainContent').innerHTML=`
+    <div class="card"><div class="card-header">
+        <div class="dot ${online?'online':'offline'}"></div>
+        <span class="card-title">${d.name}</span>
+        <span style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:${online?'#dcfce7':'#fee2e2'};color:${online?'#15803d':'#b91c1c'}">${online?'Онлайн':'Офлайн'}</span>
+        <button class="btn btn-ghost btn-sm" onclick="restartAdapter()" style="margin-left:auto">↻ Перезапустить</button>
+    </div><div class="card-body">
+        <div class="info-grid">
+            <div><div class="info-key">Тип</div><div class="info-val">${d.deviceType}</div></div>
+            ${d.serial?`<div><div class="info-key">Серийный номер</div><div class="info-val">${d.serial}</div></div>`:''}
+        </div>
+    </div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Конфигурация входов</span></div>
+    <div class="card-body">
+        ${renderConfigForm(d)}
+        <div class="btn-group" style="margin-top:14px">
+            <button class="btn btn-primary" onclick="applyConfig()" id="btnApply">Применить</button>
+            <button class="btn btn-ghost" onclick="readFromDevice()" id="btnRead">Прочитать с устройства</button>
+        </div>
+    </div></div>
+    <div class="card"><div class="card-header"><span class="card-title">Текущие значения</span></div>
+    <div class="card-body" style="padding:0">${renderValuesTable(d)}</div></div>`;
 }
 
-// ── Рендер устройства ─────────────────────────────────────────────────
-function renderDevice() {
-    if (!deviceInfo) return;
-    const d = deviceInfo;
-    const online = d.connected;
-
-    const main = document.getElementById('mainContent');
-    main.innerHTML = `
-        <!-- Инфо карточка -->
-        <div class="card">
-            <div class="card-header">
-                <div class="dot ${online ? 'online' : 'offline'}"></div>
-                <span class="card-title">${d.name}</span>
-                <span class="badge ${online ? 'badge-online' : 'badge-offline'}">${online ? 'Онлайн' : 'Офлайн'}</span>
-            </div>
-            <div class="card-body">
-                <div class="info-grid">
-                    <div class="info-item">
-                        <div class="info-key">Тип устройства</div>
-                        <div class="info-val">${d.deviceType}</div>
-                    </div>
-                    ${d.serial ? `<div class="info-item">
-                        <div class="info-key">Серийный номер</div>
-                        <div class="info-val">${d.serial}</div>
-                    </div>` : ''}
-                    <div class="info-item">
-                        <div class="info-key">Device ID</div>
-                        <div class="info-val" style="font-size:11px;font-family:monospace">${d.deviceId}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <!-- Конфигурация -->
-        <div class="card" id="configCard">
-            <div class="card-header">
-                <span class="card-title">Конфигурация входов</span>
-            </div>
-            <div class="card-body">
-                ${renderConfigForm(d)}
-                <div style="margin-top:16px;display:flex;gap:8px">
-                    <button class="btn btn-primary" onclick="applyConfig()" id="btnApply">
-                        Применить
-                    </button>
-                    <button class="btn btn-ghost" onclick="readFromDevice()" id="btnRead">
-                        Прочитать с устройства
-                    </button>
-                </div>
-            </div>
-        </div>
-
-        <!-- Текущие значения -->
-        <div class="card">
-            <div class="card-header">
-                <span class="card-title">Текущие значения</span>
-            </div>
-            <div class="card-body" style="padding:0">
-                ${renderValuesTable(d)}
-            </div>
-        </div>
-    `;
+function evalCond(cond,cfg){
+    if(!cond)return true;
+    const c=cond.replace(/\s+/g,'').replace(/[()]/g,'');
+    return c.split('||').some(part=>part.split('&&').every(expr=>{
+        const m1=expr.match(/^isDefined\((\w+)\)==(\d+)$/);if(m1)return(cfg[m1[1]]!==undefined?1:0)===parseInt(m1[2]);
+        const m2=expr.match(/^(\w+)==(-?\d+)$/);if(m2)return Number(cfg[m2[1]])===parseInt(m2[2]);
+        const m3=expr.match(/^(\w+)>=(-?\d+)$/);if(m3)return Number(cfg[m3[1]])>=parseInt(m3[2]);
+        const m4=expr.match(/^(\w+)<=(-?\d+)$/);if(m4)return Number(cfg[m4[1]])<=parseInt(m4[2]);
+        const m5=expr.match(/^(\w+)!=(-?\d+)$/);if(m5)return Number(cfg[m5[1]])!==parseInt(m5[2]);
+        return true;
+    }));
 }
 
-// ── Форма конфигурации ────────────────────────────────────────────────
-function renderConfigForm(d) {
-    if (!d.configParams || !d.configParams.length) {
-        return '<div style="color:var(--text2)">Нет конфигурируемых параметров</div>';
+function renderConfigForm(d){
+    if(!d.configParams?.length)return'<div style="color:var(--text2)">Нет параметров</div>';
+    const sc=d.savedConfig||{};
+    const groups={};
+    for(const p of d.configParams){
+        const m=p.id.match(/^(in\d+|bus\d+)/);
+        const g=m?m[1]:'general';
+        if(!groups[g])groups[g]=[];
+        groups[g].push(p);
     }
-
-    const savedConfig = d.savedConfig || {};
-
-    // Группируем параметры по входу (in1_*, in2_* и т.д.)
-    const groups = {};
-    for (const p of d.configParams) {
-        const match = p.id.match(/^(in\d+|bus\d+)/);
-        const group = match ? match[1] : 'general';
-        if (!groups[group]) groups[group] = [];
-        groups[group].push(p);
-    }
-
-    let html = '<div class="config-grid">';
-
-    for (const [group, params] of Object.entries(groups)) {
-        html += `<div style="border:1px solid var(--border);border-radius:6px;padding:12px">
-            <div style="font-size:12px;font-weight:600;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:.05em">${group.toUpperCase()}</div>`;
-
-        for (const p of params) {
-            const curVal = savedConfig[p.id] !== undefined ? savedConfig[p.id] : -1;
-            html += `<div class="field" style="margin-bottom:8px">
-                <div class="field-label">${p.name}</div>
-                <select data-param="${p.id}" onchange="onConfigChange(this)">
-                    <option value="-1" ${Number(curVal) === -1 ? 'selected' : ''}>— Неактивен —</option>
-                    ${Object.entries(p.states || {}).map(([val, label]) =>
-                        `<option value="${val}" ${Number(val) === Number(curVal) ? 'selected' : ''}>${label}</option>`
-                    ).join('')}
-                </select>
-            </div>`;
-        }
-
-        // Для M1W2 в режиме 1-Wire добавляем поле количества датчиков
-        const modeParam = params.find(p => p.id.match(/mode$/));
-        if (modeParam) {
-            const modeVal = savedConfig[modeParam.id] !== undefined ? savedConfig[modeParam.id] : 0;
-            if (Number(modeVal) === 0) { // 1-Wire режим
-                const sensKey = group + '_sensors';
-                const sensVal = savedConfig[sensKey] || 1;
-                html += `<div class="field sensors-field" data-sensors-group="${group}">
-                    <input type="number" min="0" max="20" value="${sensVal}"
-                        data-param="${sensKey}" style="width:64px"
-                        oninput="onConfigChange(this)">
-                    <label>датчиков на шине</label>
-                </div>`;
+    let html='<div class="config-grid">';
+    for(const[group,params]of Object.entries(groups)){
+        const pP=params.find(p=>p.id===group+'_type');
+        const nP=params.find(p=>p.id===group+'_n_type');
+        html+=`<div class="config-group"><div class="config-group-title">${group.toUpperCase()}</div>`;
+        if(pP||nP){
+            if(pP){
+                const cv=sc[pP.id]!==undefined?sc[pP.id]:-1;
+                html+=`<div class="field"><div class="field-label">P-вход</div>
+                    <select data-param="${pP.id}" onchange="onConfigChange(this)">
+                    <option value="-1" ${Number(cv)===-1?'selected':''}>— Неактивен —</option>
+                    ${Object.entries(pP.states||{}).map(([v,l])=>`<option value="${v}" ${Number(v)===Number(cv)?'selected':''} >${l}</option>`).join('')}
+                    </select></div>`;
             }
-        }
-
-        html += '</div>';
-    }
-
-    html += '</div>';
-    return html;
-}
-
-// ── Таблица значений ──────────────────────────────────────────────────
-function renderValuesTable(d) {
-    // Ищем все стейты устройства
-    const prefix = `${namespace}.${d.deviceId}.`;
-    const stateIds = Object.keys(liveStates).filter(k =>
-        k.startsWith(prefix) && !k.endsWith('.info.connection') && !k.endsWith('.config')
-    );
-
-    if (!stateIds.length) {
-        return '<div style="padding:16px;color:var(--text2)">Нет данных. Настройте конфигурацию и нажмите "Применить".</div>';
-    }
-
-    let html = '<table class="values-table"><thead><tr><th>Канал</th><th>Значение</th><th>Обновлено</th></tr></thead><tbody>';
-
-    for (const id of stateIds.sort()) {
-        const state = liveStates[id];
-        const name = id.replace(prefix, '').replace(/\./g, ' → ');
-        html += `<tr>
-            <td>${name}</td>
-            <td id="val-${id.replace(/\./g, '_')}">${formatValue(state)}</td>
-            <td style="color:var(--text2);font-size:11px">${state ? formatTs(state.ts) : '—'}</td>
-        </tr>`;
-    }
-
-    html += '</tbody></table>';
-    return html;
-}
-
-// ── Применение конфигурации ────────────────────────────────────────────
-function onConfigChange(el) {
-    const group = el.closest('[style*="border"]');
-    if (!group) return;
-
-    // Если изменился mode — показываем/скрываем поле sensors
-    const paramId = el.dataset.param;
-    if (paramId && paramId.endsWith('_mode')) {
-        const groupName = paramId.replace('_mode', '');
-        const sensorsField = group.querySelector(`[data-sensors-group="${groupName}"]`);
-        if (sensorsField) {
-            sensorsField.style.display = Number(el.value) === 0 ? 'flex' : 'none';
-        }
-    }
-}
-
-async function applyConfig() {
-    const btn = document.getElementById('btnApply');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Применяю...';
-
-    try {
-        // Собираем конфиг из формы
-        const config = {};
-        document.querySelectorAll('[data-param]').forEach(el => {
-            config[el.dataset.param] = Number(el.value);
-        });
-
-        // Убираем sensors для неактивных входов
-        for (const key of Object.keys(config)) {
-            if (key.endsWith('_sensors')) {
-                const group = key.replace('_sensors', '');
-                if (config[group + '_mode'] !== 0) {
-                    delete config[key];
+            if(nP){
+                const cpv=pP&&sc[pP.id]!==undefined?Number(sc[pP.id]):-1;
+                const cnv=sc[nP.id]!==undefined?sc[nP.id]:-1;
+                const nVars=params.filter(p=>p.id===group+'_n_type');
+                const aN=nVars.find(p=>evalCond(p.condition,{...sc,[group+'_type']:cpv}));
+                const nb=!aN||Object.keys(aN.states||{}).length<=1;
+                html+=`<div class="field"><div class="field-label">N-вход</div>
+                    <select data-param="${nP.id}" ${nb?'disabled':''} onchange="onConfigChange(this)"
+                        style="${nb?'background:#f5f5f5;color:#aaa':''} ">
+                    ${nb?'<option>— Заблокирован —</option>':`<option value="-1" ${Number(cnv)===-1?'selected':''}>— Неактивен —</option>
+                    ${Object.entries(aN.states||{}).map(([v,l])=>`<option value="${v}" ${Number(v)===Number(cnv)?'selected':''} >${l}</option>`).join('')}`}
+                    </select></div>`;
+            }
+        }else{
+            const seen=new Set();
+            const res=params.filter(p=>{
+                if(seen.has(p.id))return false;
+                if(p.condition&&!evalCond(p.condition,sc))return false;
+                seen.add(p.id);return true;
+            });
+            for(const p of res){
+                const cv=sc[p.id]!==undefined?sc[p.id]:-1;
+                html+=`<div class="field"><div class="field-label">${p.name}</div>
+                    <select data-param="${p.id}" onchange="onConfigChange(this)">
+                    <option value="-1" ${Number(cv)===-1?'selected':''}>— Неактивен —</option>
+                    ${Object.entries(p.states||{}).map(([v,l])=>`<option value="${v}" ${Number(v)===Number(cv)?'selected':''} >${l}</option>`).join('')}
+                    </select></div>`;
+            }
+            const mp=params.find(p=>p.id.match(/mode$/));
+            if(mp){
+                const mv=sc[mp.id]!==undefined?Number(sc[mp.id]):-1;
+                if(mv===0){
+                    const sk=group+'_sensors';
+                    html+=`<div class="sensors-row"><input type="number" min="1" max="20" value="${sc[sk]||1}" data-param="${sk}" oninput="onConfigChange(this)"><label>датчиков на шине</label></div>`;
                 }
             }
         }
+        html+='</div>';
+    }
+    return html+'</div>';
+}
 
-        const shortId = selectedDeviceId.replace(namespace + '.', '');
-        await sendToAdapter('applyConfig', { deviceId: shortId, config });
-
-        deviceInfo.savedConfig = config;
-        showToast('Конфигурация применена', 'success');
-
-        setTimeout(async () => {
-            const keys = await getDeviceStateKeys(selectedDeviceId);
-            if (keys.length) {
-                const states = await emit('getStates', keys);
-                Object.assign(liveStates, states || {});
-            }
-            renderDevice();
-        }, 1500);
-
-    } catch (e) {
-        showToast('Ошибка: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Применить';
+function onConfigChange(el){
+    const pid=el.dataset.param;
+    if(!pid||!deviceInfo)return;
+    if(pid.match(/_type$/)&&!pid.includes('_n_')){
+        const cfg=collectConfig();
+        deviceInfo.savedConfig=cfg;
+        const fg=document.querySelector('.config-grid');
+        if(fg){fg.outerHTML=renderConfigForm(deviceInfo);}
+        document.querySelectorAll('[data-param]').forEach(e=>{
+            if(e.tagName==='SELECT')e.onchange=function(){onConfigChange(this);};
+            else e.oninput=function(){onConfigChange(this);};
+        });
     }
 }
 
-async function readFromDevice() {
-    const btn = document.getElementById('btnRead');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>';
+function collectConfig(){
+    const c={};
+    document.querySelectorAll('[data-param]').forEach(el=>{if(!el.disabled)c[el.dataset.param]=Number(el.value);});
+    return c;
+}
+
+async function applyConfig(){
+    const btn=document.getElementById('btnApply');
+    btn.disabled=true; btn.innerHTML='<span class="spinner"></span> Применяю...';
+    try{
+        const config=collectConfig();
+        for(const k of Object.keys(config)){if(k.endsWith('_sensors')&&config[k.replace('_sensors','_mode')]!==0)delete config[k];}
+        await sendTo('applyConfig',{deviceId:selectedDeviceId,config});
+        deviceInfo.savedConfig=config;
+        showToast('Конфигурация применена','success');
+        setTimeout(async()=>{
+            const r=await emit('getObjectView','system','state',{startkey:namespace+'.'+selectedDeviceId+'.',endkey:namespace+'.'+selectedDeviceId+'.香'});
+            const ks=(r?.rows||[]).map(x=>x.id);
+            if(ks.length){const st=await emit('getStates',ks);Object.assign(liveStates,st||{});}
+            renderDevicePanel();
+        },1500);
+    }catch(e){showToast('Ошибка: '+e.message,'error');}
+    finally{btn.disabled=false;btn.innerHTML='Применить';}
+}
+
+async function readFromDevice(){
+    const btn=document.getElementById('btnRead');
+    btn.disabled=true;btn.innerHTML='<span class="spinner"></span>';
+    try{deviceInfo=await sendTo('getDeviceInfo',{deviceId:selectedDeviceId});renderDevicePanel();showToast('Прочитано','success');}
+    catch(e){showToast('Ошибка: '+e.message,'error');}
+    finally{btn.disabled=false;btn.innerHTML='Прочитать с устройства';}
+}
+
+function renderValuesTable(d){
+    const prefix=namespace+'.'+d.deviceId+'.';
+    const ids=Object.keys(liveStates).filter(k=>k.startsWith(prefix)&&!k.endsWith('.info.connection')&&!k.endsWith('.config'));
+    if(!ids.length)return'<div style="padding:14px;color:var(--text2);font-size:12px">Нет данных. Настройте конфигурацию и нажмите "Применить".</div>';
+    return`<table class="values-table"><thead><tr><th>Канал</th><th>Значение</th><th>Обновлено</th></tr></thead><tbody>
+    ${ids.sort().map(id=>{
+        const s=liveStates[id];
+        return`<tr><td>${id.replace(prefix,'')}</td><td id="val-${id.replace(/\./g,'_')}">${fmtVal(s)}</td><td style="color:var(--text2);font-size:11px">${fmtTs(s?.ts)}</td></tr>`;
+    }).join('')}</tbody></table>`;
+}
+
+let scanAborted=false;
+async function startScan(){
+    if(!selectedGateway){showToast('Выберите шлюз','error');return;}
+    const gw=(adapterConfig.gateways||[]).find(g=>g.name===selectedGateway);
+    if(!gw)return;
+    scanAborted=false;
+    document.getElementById('mainContent').innerHTML=`
+    <div class="card"><div class="card-header">
+        <span class="card-title">🔍 Сканирование шины</span>
+        <button class="btn btn-danger btn-sm" onclick="scanAborted=true">Остановить</button>
+    </div><div class="card-body">
+        <div style="margin-bottom:8px;color:var(--text2);font-size:12px">Шлюз: <b>${gw.name}</b> (${gw.host}:${gw.port})</div>
+        <div class="form-row">
+            <span class="form-label">Диапазон адресов</span>
+            <input id="scan_from" type="number" value="1" min="1" max="247" style="width:70px;flex:none">
+            <span style="color:var(--text2)">—</span>
+            <input id="scan_to" type="number" value="247" min="1" max="247" style="width:70px;flex:none">
+            <button class="btn btn-primary btn-sm" onclick="runScan('${gw.name.replace(/'/g,"\'")}','${gw.host}',${gw.port})">Начать</button>
+        </div>
+        <div class="progress-bar" id="scanProgress" style="display:none"><div class="progress-fill" id="scanFill" style="width:0%"></div></div>
+        <div id="scanStatus" style="font-size:12px;color:var(--text2);margin:6px 0"></div>
+        <div id="scanResults"></div>
+    </div></div>`;
+}
+
+const SIG_MAP={'WBMAI6':'WB-MAI6-since-fw-2.2','WBMAP3E':'WB-MAP3E','WBMAP12E':'WB-MAP12E','WBM1W2':'WB-M1W2-MULTIPLE-W1','WBMR6C':'WB-MR6C','WBMS':'WB-MS'};
+
+async function runScan(gwName, host, port) {
+    const from = parseInt(document.getElementById('scan_from').value);
+    const to   = parseInt(document.getElementById('scan_to').value);
+    document.getElementById('scanProgress').style.display = '';
+    document.getElementById('scanFill').style.width = '0%';
+    document.getElementById('scanStatus').textContent = 'Сканирование...';
+    document.getElementById('scanResults').innerHTML = '';
 
     try {
-        const shortId = selectedDeviceId.replace(namespace + '.', '');
-        deviceInfo = await sendToAdapter('getDeviceInfo', { deviceId: shortId });
-        renderDevice();
-        showToast('Конфигурация прочитана с устройства', 'success');
-    } catch (e) {
-        showToast('Ошибка: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.innerHTML = 'Прочитать с устройства';
+        // Запускаем через адаптер — отдельное соединение, не мешает поллингу
+        const found = await sendTo('scan', { host, port, from, to });
+        document.getElementById('scanFill').style.width = '100%';
+        document.getElementById('scanStatus').textContent = 'Готово. Найдено: ' + (found?.length || 0);
+        const exists = (adapterConfig.devices||[]).filter(d=>d.gateway===gwName).map(d=>d.slaveId);
+        renderScanResults(found || [], exists, gwName);
+    } catch(e) {
+        document.getElementById('scanStatus').textContent = 'Ошибка: ' + e.message;
     }
 }
 
-// ── Live updates ──────────────────────────────────────────────────────
-function updateLiveValue(id, state) {
-    const elId = 'val-' + id.replace(/\./g, '_');
-    const el = document.getElementById(elId);
-    if (el) {
-        el.innerHTML = formatValue(state);
-    }
-
-    // Обновляем connection dot
-    if (id.endsWith('.info.connection')) {
-        renderDeviceList();
-        // Если это текущее устройство — обновляем бейдж
-        if (selectedDeviceId && id.startsWith(selectedDeviceId)) {
-            const dot = document.querySelector('.card-header .dot');
-            const badge = document.querySelector('.card-header .badge');
-            if (dot && badge) {
-                const online = state && state.val;
-                dot.className = `dot ${online ? 'online' : 'offline'}`;
-                badge.className = `badge ${online ? 'badge-online' : 'badge-offline'}`;
-                badge.textContent = online ? 'Онлайн' : 'Офлайн';
-            }
-        }
-    }
+function renderScanResults(found,exists,gwName){
+    const el=document.getElementById('scanResults');
+    if(!found.length){el.innerHTML='';return;}
+    el.innerHTML='<div style="margin-top:10px;border:1px solid var(--border);border-radius:6px;overflow:hidden">'+
+    found.map(f=>{
+        const dt=SIG_MAP[f.signature];
+        const ex=exists.includes(f.slaveId);
+        return`<div class="scan-item">
+            <div style="font-family:monospace;font-size:12px;width:30px;color:var(--text2)">${f.slaveId}</div>
+            <div style="flex:1"><div style="font-size:13px;font-weight:500">${dt||f.signature}</div><div style="font-size:11px;color:var(--text2)">${f.signature}</div></div>
+            <span class="scan-badge ${ex?'badge-exists':dt?'badge-known':'badge-unknown'}">${ex?'Добавлено':dt?'Поддерживается':'Неизвестен'}</span>
+            ${!ex&&dt?`<button class="btn btn-primary btn-sm" onclick="addFound('${gwName}',${f.slaveId},'${dt}')">+ Добавить</button>`:''}
+        </div>`;
+    }).join('')+'</div>';
 }
 
-// ── Утилиты ───────────────────────────────────────────────────────────
-function formatValue(state) {
-    if (!state) return '<span class="val-null">—</span>';
-    const v = state.val;
-    if (v === null || v === undefined) return '<span class="val-null">нет данных</span>';
-    if (typeof v === 'boolean') {
-        return v
-            ? '<span class="val-bool-on">● Вкл</span>'
-            : '<span class="val-bool-off">○ Выкл</span>';
-    }
-    if (typeof v === 'number') {
-        return `<span class="val-number">${Math.round(v * 1000) / 1000}</span>`;
-    }
+async function addFound(gwName,slaveId,devType){
+    const name=prompt(`Название (slave ${slaveId}):`,devType+'_'+slaveId);
+    if(!name)return;
+    (adapterConfig.devices||(adapterConfig.devices=[])).push({name,gateway:gwName,slaveId,deviceType:devType,enabled:true});
+    await persistConfig(); renderDeviceList();
+    showToast('Добавлено. Перезапустите адаптер.','success');
+    // Обновляем exists в результатах
+    const exists=(adapterConfig.devices||[]).filter(d=>d.gateway===gwName).map(d=>d.slaveId);
+    const found=[...document.querySelectorAll('.scan-item')].map(el=>{
+        const sid=parseInt(el.querySelector('div').textContent);
+        const sig=el.querySelectorAll('div')[2]?.textContent?.trim();
+        return{slaveId:sid,signature:sig};
+    }).filter(f=>f.slaveId&&f.signature);
+    renderScanResults(found,exists,gwName);
+}
+
+async function restartAdapter(){
+    if(!confirm('Перезапустить адаптер?'))return;
+    try{await sendTo('restart',{});showToast('Перезапуск...','success');setTimeout(()=>loadAll(),4000);}
+    catch(e){showToast('Ошибка: '+e.message,'error');}
+}
+
+function onLiveStateChange(id,state){
+    const el=document.getElementById('val-'+id.replace(/\./g,'_'));
+    if(el){el.innerHTML=fmtVal(state);const row=el.closest('tr');if(row&&row.cells[2])row.cells[2].textContent=fmtTs(state?.ts);}
+    if(id.endsWith('.info.connection')){renderGatewayList();renderDeviceList();}
+}
+
+async function persistConfig(){
+    await sendTo('saveConfig',{gateways:adapterConfig.gateways,devices:adapterConfig.devices});
+}
+
+function fmtVal(s){
+    if(!s)return'<span class="val-null">—</span>';
+    const v=s.val;
+    if(v===null||v===undefined)return'<span class="val-null">нет данных</span>';
+    if(typeof v==='boolean')return v?'<span class="val-bool-on">● Вкл</span>':'<span class="val-bool-off">○ Выкл</span>';
+    if(typeof v==='number')return`<span class="val-number">${Math.round(v*1000)/1000}</span>`;
     return String(v);
 }
-
-function formatTs(ts) {
-    if (!ts) return '—';
-    const d = new Date(ts);
-    const pad = n => String(n).padStart(2, '0');
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
-}
-
-function sendToAdapter(command, message) {
-    return new Promise((res, rej) => {
-        socket.emit('sendTo', namespace, command, message, (result) => {
-            if (result && result.error) rej(new Error(result.error));
-            else res(result && result.result !== undefined ? result.result : result);
-        });
-    });
-}
-
+function fmtTs(ts){if(!ts)return'—';const d=new Date(ts);return`${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}:${String(d.getSeconds()).padStart(2,'0')}`;}
+function setStatus(msg){document.getElementById('headerStatus').textContent=msg;}
 let toastTimer;
-function showToast(msg, type = '') {
-    const t = document.getElementById('toast');
-    t.textContent = msg;
-    t.className = `toast show ${type}`;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { t.className = 'toast'; }, 3000);
+function showToast(msg,type=''){
+    const t=document.getElementById('toast');t.textContent=msg;t.className=`toast show ${type}`;
+    clearTimeout(toastTimer);toastTimer=setTimeout(()=>t.className='toast',3500);
 }
-
-function showError(msg) {
-    document.getElementById('mainContent').innerHTML =
-        `<div class="empty-state"><span style="color:var(--red)">${msg}</span></div>`;
-}
-
-// ── Старт ─────────────────────────────────────────────────────────────
 initSocket();
 </script>
 </body>
