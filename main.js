@@ -1,36 +1,20 @@
 'use strict';
 
-// ─── Служебные имена каналов (не опрашиваем) ────────────────────────────────────
-const SYSTEM_CHANNEL_NAMES = new Set([
-    'Serial', 'Серийный номер',
-    'Uptime', 'Время работы с момента включения',
-    'FW Version', 'Версия прошивки', 'FW_Version',
-    'HW Batch Number', 'Номер партии', 'HW_Batch_Number',
-    'MCU Temperature', 'Температура МК',
-    'MCU Voltage',
-    'Supply Voltage', 'Напряжение питания',
-    'Minimum Voltage Since Startup',
-    'Minimum MCU Voltage Since Startup',
-    'Internal Temperature', 'Температура внутри модуля',
-    '5V Output', 'Напряжение на клеммах 5V',
-    'Internal 5V Bus Voltage', 'Напряжение внутренней шины 5В',
-    'AVCC Reference',
-]);
-
-const utils          = require('@iobroker/adapter-core');
-const path           = require('path');
-const DeviceManager  = require('./lib/device-manager');
-const ObjectManager  = require('./lib/object-manager');
-const { parseTemplate, loadTemplatesFromDir } = require('./lib/wb-template-parser');
-const fs             = require('fs');
+const utils         = require('@iobroker/adapter-core');
+const path          = require('path');
+const fs            = require('fs');
+const DeviceManager = require('./lib/device-manager');
+const ObjectManager = require('./lib/object-manager');
+const { loadTemplatesFromDir } = require('./lib/wb-template-parser');
 
 class Wirenboard extends utils.Adapter {
     constructor(options) {
         super({ ...options, name: 'wirenboard' });
 
-        this._managers    = [];   // DeviceManager[] — по одному на шлюз
-        this._objManager  = null; // ObjectManager
-        this._writableMap = new Map(); // stateId → { ch, slaveId, manager }
+        this._managers   = [];              // DeviceManager[] — по одному на шлюз
+        this._objManager = null;
+        // stateId → { channelId, settingId, slaveId, mgr }
+        this._writableMap = new Map();
 
         this.on('ready',       this.onReady.bind(this));
         this.on('stateChange', this.onStateChange.bind(this));
@@ -43,21 +27,20 @@ class Wirenboard extends utils.Adapter {
     async onReady() {
         this.log.info('Wiren Board adapter starting...');
 
-        // Загружаем WB-шаблоны устройств
         const templates = this._loadTemplates();
         this.log.info(`Loaded ${templates.bySignature.size} device templates`);
 
         this._objManager = new ObjectManager(this);
+        await this._objManager.ensureAdapterInfo();
 
         const gateways = this.config.gateways || [];
         const devices  = this.config.devices  || [];
 
-        if (gateways.length === 0) {
+        if (!gateways.length) {
             this.log.warn('No gateways configured');
             return;
         }
 
-        // Запускаем все шлюзы параллельно
         await Promise.all(
             gateways
                 .filter(gw => gw.enabled !== false)
@@ -74,7 +57,6 @@ class Wirenboard extends utils.Adapter {
     async _startGateway(gw, allDevices, templates) {
         this.log.info(`Starting gateway "${gw.name}" (${gw.host}:${gw.port})`);
 
-        // Устройства этого шлюза
         const gwDevices = allDevices
             .filter(d => d.enabled !== false && d.gateway === gw.name)
             .map(d => {
@@ -93,23 +75,23 @@ class Wirenboard extends utils.Adapter {
             })
             .filter(Boolean);
 
-        if (gwDevices.length === 0) {
-            this.log.warn(`Gateway "${gw.name}": no valid devices configured`);
+        if (!gwDevices.length) {
+            this.log.warn(`Gateway "${gw.name}": no valid devices`);
             return;
         }
 
         const mgr = new DeviceManager({
-            host:            gw.host,
-            port:            gw.port,
-            pollInterval:    gw.pollInterval    || this.config.pollInterval    || 10000,
+            host:             gw.host,
+            port:             gw.port,
+            pollInterval:     gw.pollInterval         || this.config.pollInterval     || 10000,
             fastPollInterval: this.config.fastPollInterval || 500,
-            requestTimeout:  this.config.requestTimeout || 3000,
-            devices:         gwDevices,
+            requestTimeout:   this.config.requestTimeout  || 3000,
+            devices:          gwDevices,
 
             onDeviceReady: async (deviceState) => {
                 this.log.debug(`Device ready: ${deviceState.deviceId}`);
                 try {
-                    // Создаём базовые объекты устройства
+                    // 1. Базовые объекты (device-канал + info.*)
                     await this._objManager.ensureDeviceChannel({
                         deviceId:   deviceState.deviceId,
                         name:       deviceState.name,
@@ -117,41 +99,40 @@ class Wirenboard extends utils.Adapter {
                         slaveId:    deviceState.slaveId,
                     });
 
-                    // Сохраняем серийный номер
+                    // 2. Серийный номер
                     if (deviceState.serial) {
-                        await this.setStateAsync(`${deviceState.deviceId}.info.serial`, deviceState.serial, true);
+                        await this.setStateAsync(
+                            `${deviceState.deviceId}.info.serial`,
+                            deviceState.serial, true
+                        );
                     }
 
-                    // Читаем сохранённую конфигурацию из ioBroker
+                    // 3. Загружаем сохранённую конфигурацию
                     const savedConfig = await this._loadDeviceConfig(deviceState.deviceId);
 
-                    if (savedConfig && Object.keys(savedConfig).length > 0) {
-                        // Есть сохранённая конфигурация — применяем её
+                    if (savedConfig && Object.keys(savedConfig).length) {
                         this.log.info(`${deviceState.deviceId}: applying saved config`);
                         await this._applyConfig(deviceState, savedConfig, mgr, false);
                     } else {
-                        const seen = new Set();
-                        const defaultConfig = {};
-                        for (const p of deviceState.template.parameters.filter(p => p.isConfig)) {
-                            if (!seen.has(p.address)) {
-                                seen.add(p.address);
-                                defaultConfig[p.id] = -1;
-                            }
-                        }
-                        await this._saveDeviceConfig(deviceState.deviceId, defaultConfig);
-                        this.log.info(`${deviceState.deviceId}: new device, configure in tab`);
+                        // Новое устройство — читаем holding-параметры с железа
+                        const flat = await mgr.readFlatConfig(deviceState.deviceId);
+                        const initialConfig = { flat, sensors: {}, settings: {} };
+                        await this._applyConfig(deviceState, initialConfig, mgr, false);
+                        await this._saveDeviceConfig(deviceState.deviceId, initialConfig);
+                        this.log.info(`${deviceState.deviceId}: new device, read ${Object.keys(flat).length} params from hardware`);
                     }
 
-                    // Регистрируем writable каналы для подписки
+                    // 4. Регистрируем writable settings
                     this._registerWritable(deviceState, mgr);
                 } catch (e) {
-                    this.log.error(`onDeviceReady error (${deviceState.deviceId}): ${e.message}
-${e.stack}`);
+                    this.log.error(`onDeviceReady error (${deviceState.deviceId}): ${e.message}\n${e.stack}`);
                 }
             },
 
-            onStateChange: async (deviceId, channelId, value, unit) => {
-                const stateId = `${deviceId}.${channelId}`;
+            // Новый колбэк: { deviceId, channelId, measurementId, value }
+            onMeasurement: async (deviceId, channelId, measurementId, value) => {
+                // stateId вида: deviceId.channelId.measurementId
+                const stateId = `${deviceId}.${channelId}.${measurementId}`;
                 try {
                     await this.setStateAsync(stateId, { val: value, ack: true });
                 } catch (e) {
@@ -171,46 +152,142 @@ ${e.stack}`);
             logger: (msg) => this.log.debug(msg),
         });
 
-        // Создаём канальные объекты в ioBroker до старта менеджера
+        // Создаём базовые объекты до старта
         for (const dev of gwDevices) {
             await this._objManager.ensureDeviceChannel(dev);
         }
 
-        this.log.info(`Gateway "${gw.name}": creating objects...`);
-        for (const dev of gwDevices) {
-            await this._objManager.ensureDeviceChannel(dev);
-        }
-        this.log.info(`Gateway "${gw.name}": objects created, pushing manager...`);
         this._managers.push(mgr);
-
-        this._managers.push(mgr);
-        this.log.info(`Gateway "${gw.name}": starting manager...`);
         await mgr.start();
-        this.log.info(`Gateway "${gw.name}": manager started`);
+        this.log.info(`Gateway "${gw.name}": started`);
+    }
 
+    // ─── Применение конфигурации ──────────────────────────────────────────────
+
+    /**
+     * Применяет конфигурацию к устройству:
+     *  1. При необходимости записывает settings в holding-регистры
+     *  2. Создаёт объекты ioBroker для активных каналов
+     *  3. Обновляет список каналов поллинга в DeviceManager
+     *
+     * config = { [channelId]: { [settingId]: value } }
+     */
+    async _applyConfig(deviceState, config, mgr, writeToDevice = true) {
+        const { deviceId, template, slaveId } = deviceState;
+
+        // 1. Записываем rw-settings в устройство
+        // config.settings = { [channelId]: { [settingId]: value } }
+        if (writeToDevice && deviceState.connected) {
+            const settingsToWrite = config.settings || {};
+            for (const [channelId, settingsMap] of Object.entries(settingsToWrite)) {
+                for (const [settingId, value] of Object.entries(settingsMap)) {
+                    if (value === null || value === undefined || value === -1) continue;
+                    try {
+                        await mgr.writeSetting(deviceId, channelId, settingId, value);
+                    } catch (e) {
+                        this.log.warn(`${deviceId}: failed to write ${channelId}/${settingId}: ${e.message}`);
+                    }
+                }
+            }
+        }
+
+        // 2. Резолвим активные каналы с учётом конфига
+        const activeChannels = this._resolveChannels(template, config);
+
+        // 3. Применяем
+        await this._applyChannels(deviceState, activeChannels, mgr);
+
+        // 4. Сохраняем конфиг
+        deviceState.savedConfig = config;
+        this.log.info(`${deviceId}: config applied, ${activeChannels.length} active channels`);
+    }
+
+    /**
+     * Создаёт объекты ioBroker и обновляет поллинг для списка каналов.
+     */
+    async _applyChannels(deviceState, channels, mgr) {
+        const { deviceId, slaveId } = deviceState;
+
+        // Удаляем старые объекты измерений (не трогаем info.*)
+        try {
+            const existing = await this.getObjectListAsync({
+                startkey: `${deviceId}.`,
+                endkey:   `${deviceId}.\u9999`,
+            });
+            for (const row of (existing?.rows || [])) {
+                const id = row.id;
+                if (id.includes('.info.') || id.endsWith('.config') || id === deviceId) continue;
+                await this.delObjectAsync(id);
+            }
+        } catch (e) {
+            this.log.debug(`cleanup error: ${e.message}`);
+        }
+
+        // Создаём объекты для активных каналов
+        await this._objManager.createChannelObjects(deviceId, channels);
+
+        // Обновляем DeviceManager
+        mgr.updateChannels(deviceId, channels.map(ch => ({ ...ch, slaveId })));
+
+        // Регистрируем writable стейты для подписки
+        this._registerWritable(deviceState, mgr);
+    }
+
+    /**
+     * Резолвит активные каналы на основе сохранённого конфига.
+     *
+     * Конфиг хранится в формате:
+     * {
+     *   flat:     { in1_mode: 0, in2_mode: 1 },  // holding-параметры устройства
+     *   sensors:  { gg_in1_temp: 3 },              // лимиты 1-Wire датчиков
+     * }
+     *
+     * Для обратной совместимости принимаем и плоский формат { paramId: value }.
+     */
+    _resolveChannels(template, config) {
+        if (!config || !Object.keys(config).length) {
+            // Нет конфига — каналы без condition (безусловно активные)
+            return template.channels.filter(ch => !ch.condition);
+        }
+
+        const flatConfig   = config.flat   || {};
+        const sensorCounts = config.sensors || {};
+
+        return template.resolveChannels(flatConfig, sensorCounts);
     }
 
     // ─── Writable states ──────────────────────────────────────────────────────
 
     _registerWritable(deviceState, mgr) {
-        const writableChannels = deviceState.template.parameters
-            .filter(p => p.writable);
-
-        for (const ch of writableChannels) {
-            const stateId = `${this.namespace}.${deviceState.deviceId}.${ch.id}`;
-            this._writableMap.set(stateId, {
-                ch,
-                slaveId: deviceState.slaveId,
-                mgr,
-            });
+        // Сначала удаляем старые записи для этого устройства
+        for (const [k] of this._writableMap) {
+            if (k.startsWith(`${this.namespace}.${deviceState.deviceId}.`)) {
+                this._writableMap.delete(k);
+            }
         }
 
-        if (writableChannels.length > 0) {
+        let hasWritable = false;
+        for (const ch of deviceState.channels) {
+            for (const s of ch.settings) {
+                if (!s.write) continue;
+                // stateId: namespace.deviceId.channelId.settingId
+                const stateId = `${this.namespace}.${deviceState.deviceId}.${ch.id}.${s.id}`;
+                this._writableMap.set(stateId, {
+                    channelId: ch.id,
+                    settingId: s.id,
+                    mgr,
+                    deviceId: deviceState.deviceId,
+                });
+                hasWritable = true;
+            }
+        }
+
+        if (hasWritable) {
             this.subscribeStates(`${deviceState.deviceId}.*`);
         }
     }
 
-    // ─── State change (запись в устройство) ───────────────────────────────────
+    // ─── State change ─────────────────────────────────────────────────────────
 
     async onStateChange(id, state) {
         if (!state || state.ack) return;
@@ -218,10 +295,9 @@ ${e.stack}`);
         const info = this._writableMap.get(id);
         if (!info) return;
 
-        const { ch, slaveId, mgr } = info;
-
+        const { channelId, settingId, mgr, deviceId } = info;
         try {
-            await _writeChannel(ch, slaveId, state.val, mgr.client);
+            await mgr.writeSetting(deviceId, channelId, settingId, state.val);
             this.log.info(`Written ${id} = ${state.val}`);
             await this.setStateAsync(id, state.val, true);
         } catch (err) {
@@ -229,7 +305,7 @@ ${e.stack}`);
         }
     }
 
-    // ─── Сообщения от UI (консоль, сканирование) ──────────────────────────────
+    // ─── Сообщения от UI ──────────────────────────────────────────────────────
 
     async onMessage(obj) {
         if (!obj || typeof obj !== 'object') return;
@@ -239,59 +315,51 @@ ${e.stack}`);
         };
 
         switch (obj.command) {
+
             case 'scan': {
                 const { from = 1, to = 247, host, port } = obj.message || {};
                 if (!host || !port) { respond({ error: 'host and port required' }); return; }
 
-                // Создаём отдельный клиент — не мешаем поллингу
                 const ScanClient = require('./lib/modbus-client');
                 const scanClient = new ScanClient({
                     host, port,
                     timeout: this.config.requestTimeout || 3000,
                     logger: () => {},
                 });
-
                 try {
                     await scanClient.connect();
                     const found = [];
                     for (let id = from; id <= to; id++) {
+                        let sig = null;
                         try {
-                            // Вариант 1: регистр 200, два символа на регистр
-                            let sig = null;
+                            const words = await scanClient.readHolding(id, 200, 8);
+                            let str = '';
+                            for (const w of words) {
+                                const hi = (w >> 8) & 0xFF, lo = w & 0xFF;
+                                if (!hi) break; str += String.fromCharCode(hi);
+                                if (!lo) break; str += String.fromCharCode(lo);
+                            }
+                            if (str.trim()) sig = str.trim();
+                        } catch (_) {}
+
+                        if (!sig) {
                             try {
-                                const words = await scanClient.readHolding(id, 200, 8);
+                                const words = await scanClient.readHolding(id, 0, 12);
                                 let str = '';
-                                for (const w of words) {
-                                    const hi = (w>>8)&0xFF, lo = w&0xFF;
-                                    if (!hi) break;
-                                    str += String.fromCharCode(hi);
+                                for (let i = 2; i < words.length; i++) {
+                                    const lo = words[i] & 0xFF;
                                     if (!lo) break;
                                     str += String.fromCharCode(lo);
                                 }
                                 if (str.trim()) sig = str.trim();
-                            } catch(_) {}
+                            } catch (_) {}
+                        }
 
-                            // Вариант 2: регистр 0, один символ в младшем байте (MAP3E)
-                            if (!sig) {
-                                try {
-                                    const words = await scanClient.readHolding(id, 0, 12);
-                                    let str = '';
-                                    for (let i = 2; i < words.length; i++) {
-                                        const lo = words[i] & 0xFF;
-                                        if (!lo) break;
-                                        str += String.fromCharCode(lo);
-                                    }
-                                    if (str.trim()) sig = str.trim();
-                                } catch(_) {}
-                            }
-
-                            if (sig) found.push({ slaveId: id, signature: sig });
-                        } catch(_) {}
-
-                        await new Promise(r => setTimeout(r, 200));
+                        if (sig) found.push({ slaveId: id, signature: sig });
+                        await _sleep(200);
                     }
                     respond({ result: found });
-                } catch(e) {
+                } catch (e) {
                     respond({ error: e.message });
                 } finally {
                     await scanClient.disconnect();
@@ -318,17 +386,13 @@ ${e.stack}`);
             }
 
             case 'readRaw': {
-                // Прямое чтение регистра для диагностики
                 const { host, port, slaveId, regType, address, count = 1 } = obj.message || {};
                 const mgr = this._managers.find(m => m.host === host && m.port === port);
                 if (!mgr) { respond({ error: 'Gateway not found' }); return; }
                 try {
-                    let words;
-                    if (regType === 'holding') {
-                        words = await mgr.client.readHolding(slaveId, address, count);
-                    } else {
-                        words = await mgr.client.readInput(slaveId, address, count);
-                    }
+                    const words = regType === 'holding'
+                        ? await mgr.client.readHolding(slaveId, address, count)
+                        : await mgr.client.readInput(slaveId, address, count);
                     respond({ result: words });
                 } catch (e) {
                     respond({ error: e.message });
@@ -337,14 +401,14 @@ ${e.stack}`);
             }
 
             case 'applyConfig': {
-                // Применить конфигурацию устройства
+                // config = { [channelId]: { [settingId]: value } }
                 const { deviceId, config } = obj.message || {};
                 const deviceState = this._findDeviceState(deviceId);
                 if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
                 const mgr = this._findManager(deviceId);
                 if (!mgr) { respond({ error: `Manager for ${deviceId} not found` }); return; }
                 try {
-                    await this._applyConfig(deviceState, config, mgr);
+                    await this._applyConfig(deviceState, config, mgr, true);
                     await this._saveDeviceConfig(deviceId, config);
                     respond({ result: 'ok' });
                 } catch (e) {
@@ -358,26 +422,44 @@ ${e.stack}`);
                 const deviceState = this._findDeviceState(deviceId);
                 if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
                 const savedConfig = await this._loadDeviceConfig(deviceId);
+
                 respond({
                     result: {
                         deviceId,
-                        name:         deviceState.name,
-                        deviceType:   deviceState.deviceType,
-                        connected:    deviceState.connected,
-                        serial:       deviceState.serial,
-                        hardwareConfig: deviceState.deviceConfig,
-                        savedConfig:  savedConfig || {},
-                        // Все варианты конфиг-параметров с conditions
-                        configParams: deviceState.template.parameters
-                            .filter(p => p.isConfig)
-                            .map(p => ({
-                                id:         p.id,
-                                name:       p.name,
-                                address:    p.address,
-                                states:     p.states,
-                                condition:  p.condition,
-                                defaultVal: p.defaultVal,
+                        name:        deviceState.name,
+                        deviceType:  deviceState.deviceType,
+                        connected:   deviceState.connected,
+                        serial:      deviceState.serial,
+                        info:        deviceState.info,
+                        savedConfig: savedConfig || {},
+                        // Все каналы шаблона с полными дескрипторами для UI
+                        channels: deviceState.template.channels.map(ch => ({
+                            id:        ch.id,
+                            name:      ch.name,
+                            condition: ch.condition || null,
+                            measurements: (ch.measurements || []).map(m => ({
+                                id: m.id, name: m.name,
                             })),
+                            settings: (ch.settings || []).map(s => ({
+                                id:        s.id,
+                                name:      s.name,
+                                states:    s.states,
+                                default:   s.default,
+                                min:       s.min,
+                                max:       s.max,
+                                write:     s.write,
+                                isConfig:  s.isConfig || false,
+                                condition: s.condition || null,
+                            })),
+                        })),
+                        // isConfig-параметры (режимы входов) — отдельный список
+                        configParams: (deviceState.template.configParams || []).map(s => ({
+                            id:      s.id,
+                            name:    s.name,
+                            states:  s.states,
+                            default: s.default,
+                            isConfig: true,
+                        })),
                     },
                 });
                 break;
@@ -430,10 +512,9 @@ ${e.stack}`);
         }
     }
 
-    // ─── Утилиты ─────────────────────────────────────────────────────────────
+    // ─── Утилиты ──────────────────────────────────────────────────────────────
 
     _loadTemplates() {
-        // Ищем шаблоны в папке lib/wb-templates/ адаптера
         const templatesDir = path.join(__dirname, 'lib', 'wb-templates');
         if (!fs.existsSync(templatesDir)) {
             this.log.warn(`Templates directory not found: ${templatesDir}`);
@@ -446,12 +527,10 @@ ${e.stack}`);
         return result;
     }
 
-    // ─── Конфигурация устройств ──────────────────────────────────────────────────
-
     async _loadDeviceConfig(deviceId) {
         try {
             const state = await this.getStateAsync(`${deviceId}.config`);
-            if (state && state.val) {
+            if (state?.val) {
                 return typeof state.val === 'string' ? JSON.parse(state.val) : state.val;
             }
         } catch (_) {}
@@ -459,128 +538,17 @@ ${e.stack}`);
     }
 
     async _saveDeviceConfig(deviceId, config) {
-        // Создаём объект если нет
         await this.setObjectNotExistsAsync(`${deviceId}.config`, {
             type:   'state',
-            common: {
-                name:  'Device configuration',
-                type:  'json',
-                role:  'config',
-                read:  true,
-                write: true,
-            },
+            common: { name:'Device configuration', type:'json', role:'config', read:true, write:true },
             native: {},
         });
         await this.setStateAsync(`${deviceId}.config`, JSON.stringify(config), true);
     }
 
-    /**
-     * Применяет конфигурацию к устройству:
-     * 1. Записывает конфиг-параметры в holding-регистры устройства
-     * 2. Создаёт ioBroker-объекты для каналов которые активны в данной конфигурации
-     * 3. Обновляет список каналов для поллинга
-     */
-
-    async _applyConfig(deviceState, config, mgr, writeToDevice = true) {
-        const { deviceId, template, slaveId } = deviceState;
-
-        // 1. Записываем в регистры только если явно запрошено и устройство онлайн
-        if (writeToDevice && deviceState.connected) {
-            for (const [paramId, value] of Object.entries(config)) {
-                if (value === -1) continue;
-                const param = template.parameters.find(p => p.id === paramId && p.isConfig);
-                if (!param) continue;
-                try {
-                    await mgr.client.writeHolding(slaveId, param.address, value & 0xFFFF);
-                } catch (e) {
-                    this.log.warn(`${deviceId}: failed to write ${paramId}: ${e.message}`);
-                }
-            }
-        }
-
-        // 2. Определяем активные каналы на основе конфига
-        this.log.info(`${deviceId}: resolving channels...`);
-        deviceState.deviceConfig = config;
-        const activeChannels = this._resolveActiveChannels(template, config);
-        this.log.info(`${deviceId}: ${activeChannels.length} channels, cleaning old objects...`);
-
-        // 2.5. Удаляем старые объекты каналов
-        try {
-            const existing = await this.getObjectListAsync({
-                startkey: `${deviceId}.`,
-                endkey:   `${deviceId}.\u9999`,
-            });
-            for (const row of (existing?.rows || [])) {
-                const id = row.id;
-                if (id.includes('.info.') || id.endsWith('.config') || id === deviceId) continue;
-                await this.delObjectAsync(id);
-            }
-        } catch (e) {
-            this.log.debug(`cleanup error: ${e.message}`);
-        }
-
-        // 3. Создаём объекты для активных каналов
-        await this._objManager.createChannelObjects(deviceId, activeChannels);
-
-        // 4. Обновляем каналы поллинга
-        deviceState.channels = activeChannels.map(ch => ({ ...ch, slaveId }));
-
-        this.log.info(`${deviceId}: config applied, ${activeChannels.length} active channels`);
-    }
-
-    /**
-     * Определяет какие каналы активны при данной конфигурации.
-     * Разбирает condition строки из шаблона.
-     */
-    _resolveActiveChannels(template, config) {
-        const seenIds = new Set();
-        return template.channels.filter(ch => {
-            if (ch.enabled === false) return false;
-            if (ch.role === 'button') return false;
-            if (ch.regType === 'coil') return false;
-            if (ch.regType === 'press_counter') return false;
-            if (ch.format === 'string') return false;
-            if (ch.role === 'text') return false;
-            if (ch.id && ch.id.startsWith('bus') && ch.address >= 1536 && ch.address <= 3900) return false;
-            if (ch.format === 'u64' && ch.regType !== 'input') return false;
-            if (ch.id && SYSTEM_CHANNEL_NAMES && SYSTEM_CHANNEL_NAMES.has(ch.name)) return false;
-
-            // Если вход помечен как неактивен (-1) — пропускаем его каналы
-            if (ch.condition) {
-                const inMatch = ch.condition.match(/in(\d+)_(?:mode|type)/);
-                if (inMatch) {
-                    const inNum = inMatch[1];
-                    const modeKey = `in${inNum}_mode`;
-                    const typeKey = ch.condition.includes('_n_type') ? `in${inNum}_n_type` : `in${inNum}_type`;
-                    if (config[modeKey] === -1) return false;
-                    if (config[typeKey] === -1) return false;
-                }
-            }
-
-            if (!ch.condition) return true;
-
-            let active;
-            try {
-                active = _evalCondition(ch.condition, config);
-            } catch (_) {
-                active = true;
-            }
-
-            if (!active) return false;
-
-            // Дедупликация — оставляем первый активный канал с каждым id
-            if (seenIds.has(ch.id)) return false;
-            seenIds.add(ch.id);
-            return true;
-        });
-    }
-
     _findDeviceState(deviceId) {
-        this.log.info(`findDeviceState: looking for "${deviceId}", managers=${this._managers.length}`);
         for (const mgr of this._managers) {
-            const devs = mgr.getAllDevices();
-            this.log.info(`findDeviceState: manager has ${devs.length} devices: ${devs.map(d => d.deviceId).join(', ')}`);
-            for (const dev of devs) {
+            for (const dev of mgr.getAllDevices()) {
                 if (dev.deviceId === deviceId) return dev;
             }
         }
@@ -602,104 +570,17 @@ ${e.stack}`);
     }
 }
 
-// ─── Запись в канал ───────────────────────────────────────────────────────────
-
-async function _writeChannel(ch, slaveId, value, client) {
-    const sid = ch.slaveId || slaveId;
-
-    if (ch.regType === 'coil') {
-        await client.writeCoil(sid, ch.address, !!value);
-        return;
-    }
-
-    // holding: конвертируем значение обратно в сырой регистр
-    let raw = value;
-    if (ch.scale && ch.scale !== 1) {
-        raw = Math.round(value / ch.scale);
-    } else {
-        raw = Math.round(value);
-    }
-
-    // Знаковые значения → беззнаковые для Modbus
-    if (raw < 0) raw = raw + 0x10000;
-
-    await client.writeHolding(sid, ch.address, raw & 0xFFFF);
-}
-
-
-// ─── Простой evaluator для WB condition-строк ────────────────────────────────────
-/**
- * Разбирает условия вида:
- *   "in1_mode==0"
- *   "in1_mode==1"
- *   "in1_mode==0||in2_mode==0"
- *   "isDefined(in1_mode)==0||in1_mode==0"
- *
- * @param {string} condition
- * @param {object} config  { paramId: value }
- * @returns {boolean}
- */
-function _evalCondition(condition, config) {
-    if (!condition) return true;
-
-    // Убираем пробелы, переносы и скобки
-    const cond = condition.replace(/\s+/g, '').replace(/[()]/g, '');
-
-    const orParts = cond.split('||');
-
-    return orParts.some(part => {
-        const andParts = part.split('&&');
-        return andParts.every(expr => _evalExpr(expr, config));
-    });
-}
-
-function _evalExpr(expr, config) {
-    // isDefined(x)==0 → x не определён или равен 0
-    const isDefinedMatch = expr.match(/^isDefined\((\w+)\)==(\d+)$/);
-    if (isDefinedMatch) {
-        const [, name, val] = isDefinedMatch;
-        const defined = config[name] !== undefined ? 1 : 0;
-        return defined === parseInt(val);
-    }
-
-    // x==val
-    const eqMatch = expr.match(/^(\w+)==(-?\d+)$/);
-    if (eqMatch) {
-        const [, name, val] = eqMatch;
-        return Number(config[name]) === parseInt(val);
-    }
-
-    // x!=val
-    const neqMatch = expr.match(/^(\w+)!=(-?\d+)$/);
-    if (neqMatch) {
-        const [, name, val] = neqMatch;
-        return Number(config[name]) !== parseInt(val);
-    }
-
-    // x>=val
-    const gteMatch = expr.match(/^(\w+)>=(-?\d+)$/);
-    if (gteMatch) {
-        const [, name, val] = gteMatch;
-        return Number(config[name]) >= parseInt(val);
-    }
-
-    // x<=val
-    const lteMatch = expr.match(/^(\w+)<=(-?\d+)$/);
-    if (lteMatch) {
-        const [, name, val] = lteMatch;
-        return Number(config[name]) <= parseInt(val);
-    }
-
-    return true; // неизвестное выражение — пропускаем
-}
-
-// ─── Безопасный ID устройства ─────────────────────────────────────────────────
+// ─── Вспомогательные ──────────────────────────────────────────────────────────
 
 function _makeDeviceId(gw, devCfg) {
     const gwPart  = (gw.name  || 'gw').replace(/[^a-zA-Z0-9_]/g, '_');
     const devPart = (devCfg.name || `${devCfg.deviceType}_${devCfg.slaveId}`)
         .replace(/[^a-zA-Z0-9_]/g, '_');
     return `${gwPart}_${devPart}`;
+}
+
+function _sleep(ms) {
+    return new Promise(r => setTimeout(r, ms));
 }
 
 // ─── Точка входа ──────────────────────────────────────────────────────────────
