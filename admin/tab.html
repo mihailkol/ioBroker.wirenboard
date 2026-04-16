@@ -438,21 +438,50 @@ function renderConfigForm(d) {
     let html = '';
 
     // ── Режимы входов (configParams) ────────────────────────────────────
+    // Группируем попарно: in1_type + in1_n_type → одна карточка "Вход 1"
     if (configParams.length) {
         html += '<div style="margin-bottom:14px">';
         html += '<div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--text2);margin-bottom:8px">Режимы входов</div>';
         html += '<div class="config-grid">';
-        for (const s of configParams) {
-            const cur  = flat[s.id] !== undefined ? Number(flat[s.id]) : -1;
-            const opts = Object.entries(s.states || {}).map(([v, lbl]) =>
-                '<option value="' + v + '"' + (Number(v) === cur ? ' selected' : '') + '>' + lbl + '</option>'
-            ).join('');
-            html += '<div class="config-channel">' +
-                '<div class="config-channel-title">' + s.name + '</div>' +
-                '<div class="field">' +
-                '<select data-flat="' + s.id + '" onchange="onFlatChange(this)">' +
-                '<option value="-1"' + (cur === -1 ? ' selected' : '') + '>— не задано —</option>' +
-                opts + '</select></div></div>';
+
+        // Собираем уникальные номера входов из id вида inN_type / inN_n_type
+        const inputNums = [...new Set(configParams.map(s => {
+            const m = s.id.match(/^in(\d+)_/);
+            return m ? m[1] : null;
+        }).filter(Boolean))].sort((a,b) => Number(a)-Number(b));
+
+        if (inputNums.length) {
+            // Сгруппированный вид: одна карточка на вход
+            for (const n of inputNums) {
+                const pParam = configParams.find(s => s.id === 'in' + n + '_type');
+                const nParam = configParams.find(s => s.id === 'in' + n + '_n_type');
+                html += '<div class="config-channel"><div class="config-channel-title">Вход ' + n + '</div>';
+                for (const s of [pParam, nParam].filter(Boolean)) {
+                    const label = s.id.includes('_n_type') ? 'N-вход' : 'P-вход';
+                    const cur   = flat[s.id] !== undefined ? Number(flat[s.id]) : -1;
+                    const opts  = Object.entries(s.states || {}).map(([v, lbl]) =>
+                        '<option value="' + v + '"' + (Number(v) === cur ? ' selected' : '') + '>' + lbl + '</option>'
+                    ).join('');
+                    html += '<div class="field"><div class="field-label">' + label + '</div>' +
+                        '<select data-flat="' + s.id + '" onchange="onFlatChange(this)">' +
+                        '<option value="-1"' + (cur === -1 ? ' selected' : '') + '>— не задано —</option>' +
+                        opts + '</select></div>';
+                }
+                html += '</div>';
+            }
+        } else {
+            // Fallback: просто список
+            for (const s of configParams) {
+                const cur  = flat[s.id] !== undefined ? Number(flat[s.id]) : -1;
+                const opts = Object.entries(s.states || {}).map(([v, lbl]) =>
+                    '<option value="' + v + '"' + (Number(v) === cur ? ' selected' : '') + '>' + lbl + '</option>'
+                ).join('');
+                html += '<div class="config-channel">' +
+                    '<div class="config-channel-title">' + s.name + '</div>' +
+                    '<div class="field"><select data-flat="' + s.id + '" onchange="onFlatChange(this)">' +
+                    '<option value="-1"' + (cur === -1 ? ' selected' : '') + '>— не задано —</option>' +
+                    opts + '</select></div></div>';
+            }
         }
         html += '</div></div>';
     }
