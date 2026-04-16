@@ -208,7 +208,7 @@ class Wirenboard extends utils.Adapter {
     async _applyChannels(deviceState, channels, mgr) {
         const { deviceId, slaveId } = deviceState;
 
-        // Удаляем старые объекты измерений (не трогаем info.*)
+        // Удаляем старые объекты и стейты измерений (не трогаем info.*)
         try {
             const existing = await this.getObjectListAsync({
                 startkey: `${deviceId}.`,
@@ -217,6 +217,10 @@ class Wirenboard extends utils.Adapter {
             for (const row of (existing?.rows || [])) {
                 const id = row.id;
                 if (id.includes('.info.') || id.endsWith('.config') || id === deviceId) continue;
+                // Удаляем стейт если объект — state
+                if (row.value?.type === 'state') {
+                    try { await this.delStateAsync(id); } catch (_) {}
+                }
                 await this.delObjectAsync(id);
             }
         } catch (e) {
