@@ -318,15 +318,17 @@ function renderConfigForm(d) {
     const sensors      = sc.sensors      || {};
     const settings     = sc.settings     || {};
 
+    const flatIds = new Set(configParams.map(function(s) { return s.id; }));
     let html = '';
+
+    // Группируем configParams по номеру входа: inN_* → вход N
+    const inputNums = [...new Set(configParams.map(function(s) {
+        const m = s.id.match(/^in(\d+)_/);
+        return m ? m[1] : null;
+    }).filter(Boolean))].sort(function(a, b) { return Number(a) - Number(b); });
 
     // ── Секция входов ────────────────────────────────────────────────────────
     if (configParams.length) {
-        // Группируем по номеру входа: inN_* → вход N
-        const inputNums = [...new Set(configParams.map(s => {
-            const m = s.id.match(/^in(\d+)_/);
-            return m ? m[1] : null;
-        }).filter(Boolean))].sort((a, b) => Number(a) - Number(b));
 
         html += '<div class="section-label">Режимы входов</div>';
         html += '<div class="inputs-grid">';
@@ -357,15 +359,30 @@ function renderConfigForm(d) {
                         opts + '</select>';
 
                     // Текущие значения под селектом
-                    // Ищем канал по паттерну: gg_inN_p_channels, gg_inN_n_channels, gg_inN_temp, gg_inN_channels
+                    // Поддерживаем разные паттерны именования каналов:
+                    // MAI6: gg_inN_p_channels, gg_inN_n_channels
+                    // M1W2: gg_inN_temp, gg_inN_channels
+                    // MR3LV: g_inN
                     const isN   = s.id.includes('_n_');
+                    const devId = d.deviceId || '';
                     const pfxs  = [
-                        NS + '.' + (d.deviceId || '') + '.gg_in' + n + (isN ? '_n_channels.' : '_p_channels.'),
-                        NS + '.' + (d.deviceId || '') + '.gg_in' + n + '_channels.',
-                        NS + '.' + (d.deviceId || '') + '.gg_in' + n + '_temp.',
+                        NS + '.' + devId + '.gg_in' + n + (isN ? '_n_channels.' : '_p_channels.'),
+                        NS + '.' + devId + '.gg_in' + n + '_channels.',
+                        NS + '.' + devId + '.gg_in' + n + '_temp.',
+                        NS + '.' + devId + '.g_in' + n + '.',
                     ];
+                    // Собираем id measurement-ов для фильтрации (не показываем settings)
+                    const inCh = allChannels.find(function(ch) {
+                        return pfxs.some(function(p) { return (NS + '.' + devId + '.' + ch.id + '.').startsWith(p) || p.startsWith(NS + '.' + devId + '.' + ch.id + '.'); });
+                    });
+                    const measurementIds = new Set((inCh ? inCh.measurements || [] : []).map(function(m) { return m.id; }));
+
                     const vals = Object.entries(liveStates).filter(function(e) {
-                        return cur !== -1 && pfxs.some(function(p) { return e[0].startsWith(p); });
+                        if (!cur !== false && cur === -1) return false;
+                        if (!pfxs.some(function(p) { return e[0].startsWith(p); })) return false;
+                        // Показываем только measurements, не settings
+                        const mId = e[0].split('.').pop();
+                        return measurementIds.size === 0 || measurementIds.has(mId);
                     });
 
                     if (vals.length) {
@@ -379,6 +396,25 @@ function renderConfigForm(d) {
                                 '</div>';
                         }
                         html += '</div>';
+                    }
+                }
+
+                // Дополнительные rw-settings этого входа (debounce и т.п.)
+                const inCh = allChannels.find(function(ch) {
+                    return ch.id === 'g_in' + n || ch.id === 'gg_in' + n ||
+                           (ch.id && ch.id.startsWith('g_in' + n) && !ch.id.includes('temp') && !ch.id.includes('channel'));
+                });
+                if (inCh) {
+                    const nonFlatSettings = (inCh.settings || []).filter(function(s) { return !flatIds.has(s.id); });
+                    const chCfg = settings[inCh.id] || {};
+                    for (const s of nonFlatSettings) {
+                        const cur = chCfg[s.id] !== undefined ? chCfg[s.id] : (s.default != null ? s.default : 0);
+                        const minA = s.min !== null ? ' min="' + s.min + '"' : '';
+                        const maxA = s.max !== null ? ' max="' + s.max + '"' : '';
+                        html += '<div class="input-side-label">' + s.name + '</div>';
+                        html += '<input type="number"' + minA + maxA + ' value="' + cur + '"' +
+                            ' data-ch="' + inCh.id + '" data-setting="' + s.id + '"' +
+                            ' style="width:100%;padding:5px 8px;border:1px solid var(--border);border-radius:5px;font-size:12px;margin-bottom:6px">';
                     }
                 }
 
@@ -403,15 +439,55 @@ function renderConfigForm(d) {
             }
         }
 
-        html += '</div></div>'; // inputs-grid + section
+        html += '</div>'; // inputs-grid
 
         // Пустой div чтобы margin-bottom не схлопывался
         html += '<div style="margin-bottom:4px"></div>';
     }
 
+    // ── Выходы (реле) — writable measurements ────────────────────────────────
+    const outputChannels = allChannels.filter(function(ch) {
+        return (ch.measurements || []).some(function(m) { return m.writable; });
+    });
+    if (outputChannels.length) {
+        html += '<div class="section-label" style="margin-top:8px">Выходы</div>';
+        html += '<div class="inputs-grid">';
+        for (const ch of outputChannels) {
+            const writables = (ch.measurements || []).filter(function(m) { return m.writable; });
+            html += '<div class="input-card"><div class="input-card-title">' + ch.name + '</div>';
+            for (const m of writables) {
+                const stateId = NS + '.' + (d.deviceId || '') + '.' + ch.id + '.' + m.id;
+                const state   = liveStates[stateId];
+                const val     = state ? state.val : null;
+                const isOn    = val === true || val === 1;
+                html += '<div class="input-side-label">' + m.name + '</div>';
+                html += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">' +
+                    '<span style="font-size:13px;font-weight:600;color:' + (val === null ? 'var(--text2)' : isOn ? 'var(--green)' : 'var(--text2)') + '">' +
+                    (val === null ? '—' : isOn ? '● Вкл' : '○ Выкл') + '</span>' +
+                    '</div>';
+            }
+            html += '</div>';
+        }
+        html += '</div>';
+    }
+
     // ── rw-настройки (turns, phi и т.д.) ─────────────────────────────────────
-    const flatIds    = new Set(configParams.map(function(s) { return s.id; }));
+    // Собираем id каналов которые уже показаны в секции входов
+    // чтобы не дублировать их в rw-настройках
+    const inputChIds = new Set();
+    if (inputNums && inputNums.length) {
+        for (const n of inputNums) {
+            // Все каналы которые содержат inN в id
+            allChannels.forEach(function(ch) {
+                if (ch.id && (ch.id.includes('in' + n) || ch.id === 'g_in' + n || ch.id === 'gg_in' + n)) {
+                    inputChIds.add(ch.id);
+                }
+            });
+        }
+    }
+
     const rwChannels = allChannels.filter(function(ch) {
+        if (inputChIds.has(ch.id)) return false;  // уже в секции входов
         return (ch.settings || []).some(function(s) { return !flatIds.has(s.id); });
     });
 
@@ -499,7 +575,6 @@ async function applyConfig() {
             if (k.startsWith(prefix) && !k.startsWith(prefix + 'info.')) delete liveStates[k];
         }
         deviceInfo = await sendTo('getDeviceInfo', { deviceId: selectedDeviceId });
-        rerenderConfigForm();
         showToast('Конфигурация применена', 'success');
         setTimeout(async function() {
             const r = await emit('getObjectView', 'system', 'state',
@@ -609,7 +684,7 @@ async function deleteGateway(name) {
     showToast('Шлюз удалён.', 'success');
 }
 
-const DEVICE_TYPES = ['WB-MAI6-since-fw-2.2','WB-M1W2-MULTIPLE-W1','WB-MAP3E','WB-MAP12E','WB-MS','WB-MR6C'];
+const DEVICE_TYPES = ['WB-MAI6-since-fw-2.2','WB-M1W2-MULTIPLE-W1','WB-MAP3E','WB-MAP12E','WB-MS','WB-MR6C','WB-MR3LV'];
 
 function showDeviceForm(devId) {
     const gws = adapterConfig.gateways || [];
@@ -706,24 +781,42 @@ function startScan(gw) {
 }
 
 const SIG_MAP = {
-    'WBMAI6':'WB-MAI6-since-fw-2.2','WBMAP3E':'WB-MAP3E','WBMAP12E':'WB-MAP12E',
+    'WBMAI6':'WB-MAI6-since-fw-2.2','WBMAP3E':'WB-MAP3E','WBMAP12E':'WB-MAP12E','WBMR3':'WB-MR3LV',
     'WBM1W2':'WB-M1W2-MULTIPLE-W1','WBMR6C':'WB-MR6C','WBMS':'WB-MS'
 };
 
 async function runScan(gwName, host, port) {
-    const from = parseInt(document.getElementById('scan_from').value);
-    const to   = parseInt(document.getElementById('scan_to').value);
+    const from  = parseInt(document.getElementById('scan_from').value);
+    const to    = parseInt(document.getElementById('scan_to').value);
+    const total = to - from + 1;
+
     document.getElementById('scanProgress').style.display = '';
     document.getElementById('scanFill').style.width = '0%';
-    document.getElementById('scanStatus').textContent = 'Сканирование...';
+    document.getElementById('scanStatus').textContent = 'Сканирование 0/' + total + '...';
     document.getElementById('scanResults').innerHTML = '';
+
+    // Анимируем прогресс-бар пока идёт сканирование
+    // ~550мс на адрес (3 попытки × 500мс таймаут + 50мс пауза в худшем случае,
+    //  но обычно быстрее — первый вариант отвечает)
+    const estMs  = total * 150;
+    const startTs = Date.now();
+    const progTimer = setInterval(function() {
+        const elapsed = Date.now() - startTs;
+        const pct = Math.min(95, Math.round(elapsed / estMs * 100));
+        const done = Math.round(pct * total / 100);
+        document.getElementById('scanFill').style.width = pct + '%';
+        document.getElementById('scanStatus').textContent = 'Сканирование ' + done + '/' + total + '...';
+    }, 300);
+
     try {
         const found = await sendTo('scan', { host, port, from, to });
+        clearInterval(progTimer);
         document.getElementById('scanFill').style.width = '100%';
         document.getElementById('scanStatus').textContent = 'Готово. Найдено: ' + (found ? found.length : 0);
         const exists = (adapterConfig.devices || []).filter(function(d) { return d.gateway === gwName; }).map(function(d) { return d.slaveId; });
         renderScanResults(found || [], exists, gwName);
     } catch (e) {
+        clearInterval(progTimer);
         document.getElementById('scanStatus').textContent = 'Ошибка: ' + e.message;
     }
 }

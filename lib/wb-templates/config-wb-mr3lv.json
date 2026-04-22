@@ -1,0 +1,348 @@
+{
+    "title": "WB-MR3LV",
+    "device_type": "WB-MR3LV",
+    "group": "g-wb",
+    "hw": [
+        {
+            "signature": "WBMR3"
+        }
+    ],
+    "device": {
+        "name": "WB-MR3LV",
+        "id": "wb-mr3lv",
+        "max_read_registers": 0,
+        "response_timeout_ms": 1,
+        "frame_timeout_ms": 8,
+        "enable_wb_continuous_read": true,
+        "groups": [
+            {
+                "title": "Input 0",
+                "id": "g_in0"
+            },
+            {
+                "title": "Input 1",
+                "id": "g_in1"
+            },
+            {
+                "title": "Input 2",
+                "id": "g_in2"
+            },
+            {
+                "title": "Input 3",
+                "id": "g_in3"
+            },
+            {
+                "title": "Outputs",
+                "id": "g_outputs"
+            },
+            {
+                "title": "HW Info",
+                "id": "g_hw_info"
+            }
+        ],
+        "parameters": {
+            "in0_mode": {
+                "title": "Input 0 Mode",
+                "address": 16,
+                "reg_type": "holding",
+                "enum": [
+                    2,
+                    3,
+                    4
+                ],
+                "default": 2,
+                "enum_titles": [
+                    "Turn off all outputs",
+                    "Control disabled",
+                    "Mapping matrix"
+                ],
+                "group": "g_in0",
+                "order": 1
+            },
+            "in0_debounce_ms": {
+                "title": "Input 0 Debounce (ms)",
+                "address": 27,
+                "reg_type": "holding",
+                "min": 0,
+                "max": 100,
+                "default": 50,
+                "group": "g_in0",
+                "order": 2
+            },
+            "in1_mode": {
+                "title": "Input 1 Mode",
+                "address": 9,
+                "reg_type": "holding",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "default": 0,
+                "enum_titles": [
+                    "Push button",
+                    "Latching switch",
+                    "Turn off all outputs",
+                    "Control disabled",
+                    "Mapping matrix"
+                ],
+                "group": "g_in1",
+                "order": 1
+            },
+            "in1_debounce_ms": {
+                "title": "Input 1 Debounce (ms)",
+                "address": 20,
+                "reg_type": "holding",
+                "min": 0,
+                "max": 100,
+                "default": 50,
+                "group": "g_in1",
+                "order": 2
+            },
+            "in2_mode": {
+                "title": "Input 2 Mode",
+                "address": 10,
+                "reg_type": "holding",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "default": 0,
+                "enum_titles": [
+                    "Push button",
+                    "Latching switch",
+                    "Turn off all outputs",
+                    "Control disabled",
+                    "Mapping matrix"
+                ],
+                "group": "g_in2",
+                "order": 1
+            },
+            "in2_debounce_ms": {
+                "title": "Input 2 Debounce (ms)",
+                "address": 21,
+                "reg_type": "holding",
+                "min": 0,
+                "max": 100,
+                "default": 50,
+                "group": "g_in2",
+                "order": 2
+            },
+            "in3_mode": {
+                "title": "Input 3 Mode",
+                "address": 11,
+                "reg_type": "holding",
+                "enum": [
+                    0,
+                    1,
+                    2,
+                    3,
+                    4
+                ],
+                "default": 0,
+                "enum_titles": [
+                    "Push button",
+                    "Latching switch",
+                    "Turn off all outputs",
+                    "Control disabled",
+                    "Mapping matrix"
+                ],
+                "group": "g_in3",
+                "order": 1
+            },
+            "in3_debounce_ms": {
+                "title": "Input 3 Debounce (ms)",
+                "address": 22,
+                "reg_type": "holding",
+                "min": 0,
+                "max": 100,
+                "default": 50,
+                "group": "g_in3",
+                "order": 2
+            },
+            "outputs_restore_state": {
+                "title": "Restore Outputs State on Startup",
+                "address": 6,
+                "reg_type": "holding",
+                "enum": [
+                    0,
+                    1
+                ],
+                "default": 0,
+                "enum_titles": [
+                    "No",
+                    "Yes"
+                ],
+                "group": "g_outputs",
+                "order": 1
+            },
+            "safety_timer_s": {
+                "title": "Safety Timer (s), 0 = disabled",
+                "address": 8,
+                "reg_type": "holding",
+                "min": 0,
+                "default": 0,
+                "group": "g_outputs",
+                "order": 2
+            }
+        },
+        "channels": [
+            {
+                "name": "Input 0",
+                "id": "input_0",
+                "reg_type": "discrete",
+                "address": 7,
+                "type": "switch",
+                "sporadic": true,
+                "group": "g_in0"
+            },
+            {
+                "name": "Input 0 Counter",
+                "id": "input_0_counter",
+                "reg_type": "input",
+                "address": 39,
+                "type": "value",
+                "sporadic": true,
+                "group": "g_in0"
+            },
+            {
+                "name": "Input 1",
+                "id": "input_1",
+                "reg_type": "discrete",
+                "address": 0,
+                "type": "switch",
+                "sporadic": true,
+                "group": "g_in1"
+            },
+            {
+                "name": "Input 1 Counter",
+                "id": "input_1_counter",
+                "reg_type": "input",
+                "address": 32,
+                "type": "value",
+                "sporadic": true,
+                "group": "g_in1"
+            },
+            {
+                "name": "Input 2",
+                "id": "input_2",
+                "reg_type": "discrete",
+                "address": 1,
+                "type": "switch",
+                "sporadic": true,
+                "group": "g_in2"
+            },
+            {
+                "name": "Input 2 Counter",
+                "id": "input_2_counter",
+                "reg_type": "input",
+                "address": 33,
+                "type": "value",
+                "sporadic": true,
+                "group": "g_in2"
+            },
+            {
+                "name": "Input 3",
+                "id": "input_3",
+                "reg_type": "discrete",
+                "address": 2,
+                "type": "switch",
+                "sporadic": true,
+                "group": "g_in3"
+            },
+            {
+                "name": "Input 3 Counter",
+                "id": "input_3_counter",
+                "reg_type": "input",
+                "address": 34,
+                "type": "value",
+                "sporadic": true,
+                "group": "g_in3"
+            },
+            {
+                "name": "Relay K1",
+                "id": "K1",
+                "reg_type": "coil",
+                "address": 0,
+                "type": "switch",
+                "group": "g_outputs"
+            },
+            {
+                "name": "Relay K2",
+                "id": "K2",
+                "reg_type": "coil",
+                "address": 1,
+                "type": "switch",
+                "group": "g_outputs"
+            },
+            {
+                "name": "Relay K3",
+                "id": "K3",
+                "reg_type": "coil",
+                "address": 2,
+                "type": "switch",
+                "group": "g_outputs"
+            },
+            {
+                "name": "Serial",
+                "reg_type": "input",
+                "address": 270,
+                "type": "text",
+                "format": "u32",
+                "group": "g_hw_info"
+            },
+            {
+                "name": "Supply Voltage",
+                "reg_type": "input",
+                "address": 121,
+                "type": "voltage",
+                "scale": 0.001,
+                "enabled": false,
+                "group": "g_hw_info"
+            },
+            {
+                "name": "Uptime",
+                "reg_type": "input",
+                "address": 104,
+                "type": "text",
+                "format": "u32",
+                "enabled": false,
+                "group": "g_hw_info"
+            }
+        ],
+        "translations": {
+            "en": {
+                "WB-MR3LV": "WB-MR3LV (3-channel relay module, low voltage inputs)"
+            },
+            "ru": {
+                "WB-MR3LV": "WB-MR3LV (модуль на 3 реле, низковольтные входы)",
+                "Input 0": "Вход 0",
+                "Input 0 Counter": "Счётчик 0",
+                "Input 1": "Вход 1",
+                "Input 1 Counter": "Счётчик 1",
+                "Input 2": "Вход 2",
+                "Input 2 Counter": "Счётчик 2",
+                "Input 3": "Вход 3",
+                "Input 3 Counter": "Счётчик 3",
+                "Relay K1": "Реле K1",
+                "Relay K2": "Реле K2",
+                "Relay K3": "Реле K3",
+                "Outputs": "Выходы",
+                "Restore Outputs State on Startup": "Восстанавливать состояние реле при включении",
+                "Safety Timer (s), 0 = disabled": "Таймер безопасности (с), 0 = выкл",
+                "Turn off all outputs": "Выключить все выходы",
+                "Control disabled": "Управление отключено",
+                "Mapping matrix": "По матрице привязок",
+                "Push button": "Кнопка",
+                "Latching switch": "Выключатель",
+                "No": "Нет",
+                "Yes": "Да"
+            }
+        }
+    }
+}

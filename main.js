@@ -272,13 +272,28 @@ class Wirenboard extends utils.Adapter {
 
         let hasWritable = false;
         for (const ch of deviceState.channels) {
+            // Writable settings (holding-параметры)
             for (const s of ch.settings) {
                 if (!s.write) continue;
-                // stateId: namespace.deviceId.channelId.settingId
                 const stateId = `${this.namespace}.${deviceState.deviceId}.${ch.id}.${s.id}`;
                 this._writableMap.set(stateId, {
+                    type: 'setting',
                     channelId: ch.id,
                     settingId: s.id,
+                    mgr,
+                    deviceId: deviceState.deviceId,
+                });
+                hasWritable = true;
+            }
+            // Writable measurements (coil — реле и т.п.)
+            for (const m of ch.measurements) {
+                this.log.debug(`registerWritable: ${ch.id}.${m.id} regType=${m.regType} writable=${m.writable}`);
+                if (!m.writable) continue;
+                const stateId = `${this.namespace}.${deviceState.deviceId}.${ch.id}.${m.id}`;
+                this._writableMap.set(stateId, {
+                    type: 'channel',
+                    channelId: ch.id,
+                    measurementId: m.id,
                     mgr,
                     deviceId: deviceState.deviceId,
                 });
@@ -299,13 +314,18 @@ class Wirenboard extends utils.Adapter {
         const info = this._writableMap.get(id);
         if (!info) return;
 
-        const { channelId, settingId, mgr, deviceId } = info;
+        const { type, channelId, mgr, deviceId } = info;
+        this.log.info(`Write ${id}: type=${type} channelId=${channelId} measurementId=${info.measurementId} settingId=${info.settingId}`);
         try {
-            await mgr.writeSetting(deviceId, channelId, settingId, state.val);
+            if (type === 'channel') {
+                await mgr.writeChannel(deviceId, channelId, info.measurementId, state.val);
+            } else {
+                await mgr.writeSetting(deviceId, channelId, info.settingId, state.val);
+            }
             this.log.info(`Written ${id} = ${state.val}`);
             await this.setStateAsync(id, state.val, true);
         } catch (err) {
-            this.log.error(`Write error ${id}: ${err.message}`);
+            this.log.error(`Write error ${id}: ${err.message}\n${err.stack}`);
         }
     }
 
@@ -327,7 +347,7 @@ class Wirenboard extends utils.Adapter {
                 const ScanClient = require('./lib/modbus-client');
                 const scanClient = new ScanClient({
                     host, port,
-                    timeout: this.config.requestTimeout || 3000,
+                    timeout: 500,  // короткий таймаут для сканирования
                     logger: () => {},
                 });
                 try {
@@ -335,17 +355,37 @@ class Wirenboard extends utils.Adapter {
                     const found = [];
                     for (let id = from; id <= to; id++) {
                         let sig = null;
-                        try {
-                            const words = await scanClient.readHolding(id, 200, 8);
-                            let str = '';
-                            for (const w of words) {
-                                const hi = (w >> 8) & 0xFF, lo = w & 0xFF;
-                                if (!hi) break; str += String.fromCharCode(hi);
-                                if (!lo) break; str += String.fromCharCode(lo);
-                            }
-                            if (str.trim()) sig = str.trim();
-                        } catch (_) {}
 
+                        // Вариант 1: input 200, один символ на регистр (новые устройства: MR3LV и др.)
+                        if (!sig) {
+                            try {
+                                const words = await scanClient.readInput(id, 200, 8);
+                                let str = '';
+                                for (const w of words) {
+                                    if (!w) break;
+                                    str += String.fromCharCode(w & 0xFF);
+                                }
+                                const s = str.trim();
+                                if (s && /^[A-Z0-9_-]+$/.test(s)) sig = s;
+                            } catch (_) {}
+                        }
+
+                        // Вариант 2: holding 200, два символа на регистр (старые устройства)
+                        if (!sig) {
+                            try {
+                                const words = await scanClient.readHolding(id, 200, 8);
+                                let str = '';
+                                for (const w of words) {
+                                    const hi = (w >> 8) & 0xFF, lo = w & 0xFF;
+                                    if (!hi) break; str += String.fromCharCode(hi);
+                                    if (!lo) break; str += String.fromCharCode(lo);
+                                }
+                                const s = str.trim();
+                                if (s && /^[A-Z0-9_-]+$/.test(s)) sig = s;
+                            } catch (_) {}
+                        }
+
+                        // Вариант 3: holding 0, один символ в младшем байте (MAP3E)
                         if (!sig) {
                             try {
                                 const words = await scanClient.readHolding(id, 0, 12);
@@ -355,12 +395,21 @@ class Wirenboard extends utils.Adapter {
                                     if (!lo) break;
                                     str += String.fromCharCode(lo);
                                 }
-                                if (str.trim()) sig = str.trim();
+                                const s = str.trim();
+                                if (s && /^[A-Z0-9_-]+$/.test(s)) sig = s;
                             } catch (_) {}
                         }
 
-                        if (sig) found.push({ slaveId: id, signature: sig });
-                        await _sleep(200);
+                        if (sig) {
+                            found.push({ slaveId: id, signature: sig });
+                            this.log.info(`Scan: found ${sig} at slave ${id}`);
+                        }
+                        // Прогресс каждые 10 адресов
+                        if ((id - from) % 10 === 0) {
+                            const pct = Math.round((id - from) / (to - from + 1) * 100);
+                            this.log.debug(`Scan progress: ${pct}% (slave ${id})`);
+                        }
+                        await _sleep(50);
                     }
                     respond({ result: found });
                 } catch (e) {
@@ -442,7 +491,7 @@ class Wirenboard extends utils.Adapter {
                             name:      ch.name,
                             condition: ch.condition || null,
                             measurements: (ch.measurements || []).map(m => ({
-                                id: m.id, name: m.name,
+                                id: m.id, name: m.name, writable: m.writable || false,
                             })),
                             settings: (ch.settings || []).map(s => ({
                                 id:        s.id,
