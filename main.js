@@ -175,9 +175,24 @@ class Wirenboard extends utils.Adapter {
     async _applyConfig(deviceState, config, mgr, writeToDevice = true) {
         const { deviceId, template, slaveId } = deviceState;
 
-        // 1. Записываем rw-settings в устройство
-        // config.settings = { [channelId]: { [settingId]: value } }
+        // 1. Записываем rw-settings и configParams в устройство
         if (writeToDevice && deviceState.connected) {
+            // 1a. configParams (flat) — режимы входов и т.п.
+            // Используем _writeConfigParam через тот же механизм что и writeSetting
+            const flatToWrite = config.flat || {};
+            for (const [paramId, value] of Object.entries(flatToWrite)) {
+                if (value === null || value === undefined || value === -1) continue;
+                const param = template.configParams.find(p => p.id === paramId);
+                if (!param) continue;
+                try {
+                    await mgr.writeConfigParam(deviceId, paramId, param.address, value);
+                    this.log.info(`${deviceId}: written configParam ${paramId}=${value}`);
+                } catch (e) {
+                    this.log.warn(`${deviceId}: failed to write configParam ${paramId}: ${e.message}`);
+                }
+            }
+
+            // 1b. rw-settings каналов
             const settingsToWrite = config.settings || {};
             for (const [channelId, settingsMap] of Object.entries(settingsToWrite)) {
                 for (const [settingId, value] of Object.entries(settingsMap)) {
