@@ -114,14 +114,11 @@ class Wirenboard extends utils.Adapter {
                         this.log.info(`${deviceState.deviceId}: applying saved config`);
                         await this._applyConfig(deviceState, savedConfig, mgr, false);
                     } else {
-                        // Новое устройство — читаем holding-параметры с железа
-                        const flat = await mgr.readFlatConfig(deviceState.deviceId);
-                        const initialConfig = { flat, sensors: {}, settings: {} };
-                        await this._applyConfig(deviceState, initialConfig, mgr, false);
-                        await this._saveDeviceConfig(deviceState.deviceId, initialConfig);
-                        this.log.info(`${deviceState.deviceId}: new device, read ${Object.keys(flat).length} params from hardware`);
+                        // Новое устройство — сохраняем пустой конфиг, ждём настройки в табе
+                        const emptyConfig = { flat: {}, sensors: {}, settings: {} };
+                        await this._saveDeviceConfig(deviceState.deviceId, emptyConfig);
+                        this.log.info(`${deviceState.deviceId}: new device, waiting for configuration`);
                     }
-
                     // 4. Регистрируем writable settings
                     this._registerWritable(deviceState, mgr);
                 } catch (e) {
@@ -264,13 +261,14 @@ class Wirenboard extends utils.Adapter {
      * Для обратной совместимости принимаем и плоский формат { paramId: value }.
      */
     _resolveChannels(template, config) {
-        if (!config || !Object.keys(config).length) {
-            // Нет конфига — каналы без condition (безусловно активные)
-            return template.channels.filter(ch => !ch.condition);
-        }
+        const flatConfig   = (config && config.flat)    || {};
+        const sensorCounts = (config && config.sensors) || {};
 
-        const flatConfig   = config.flat   || {};
-        const sensorCounts = config.sensors || {};
+        // Пустой конфиг (новое устройство) — только системный канал
+        if (!Object.keys(flatConfig).length) {
+            return template.resolveChannels({}, {})
+                .filter(ch => ch.id === 'system');
+        }
 
         return template.resolveChannels(flatConfig, sensorCounts);
     }
@@ -491,6 +489,18 @@ class Wirenboard extends utils.Adapter {
                 if (!deviceState) { respond({ error: `Device ${deviceId} not found` }); return; }
                 const savedConfig = await this._loadDeviceConfig(deviceId);
 
+                const flat    = (savedConfig && savedConfig.flat)    || {};
+                const sensors = (savedConfig && savedConfig.sensors) || {};
+
+                // Резолвим активные каналы с учётом текущего конфига
+                const activeChannels = deviceState.template.resolveChannels(flat, sensors);
+
+                // Все configParams (flat-регистры) для UI — из всех каналов шаблона
+                const allChannels = deviceState.template.resolveChannels({}, {});
+                const configParams = allChannels
+                    .flatMap(ch => ch.settings || [])
+                    .filter(s => s.isConfig);
+
                 respond({
                     result: {
                         deviceId,
@@ -500,33 +510,30 @@ class Wirenboard extends utils.Adapter {
                         serial:      deviceState.serial,
                         info:        deviceState.info,
                         savedConfig: savedConfig || {},
-                        // Все каналы шаблона с полными дескрипторами для UI
-                        channels: deviceState.template.channels.map(ch => ({
-                            id:        ch.id,
-                            name:      ch.name,
-                            condition: ch.condition || null,
+                        channels: activeChannels.map(ch => ({
+                            id:   ch.id,
+                            name: ch.name,
                             measurements: (ch.measurements || []).map(m => ({
-                                id: m.id, name: m.name, writable: m.writable || false,
+                                id:       m.id,
+                                name:     m.name,
+                                writable: m.writable || false,
                             })),
                             settings: (ch.settings || []).map(s => ({
-                                id:        s.id,
-                                name:      s.name,
-                                states:    s.states,
-                                default:   s.default,
-                                min:       s.min,
-                                max:       s.max,
-                                write:     s.write,
-                                isConfig:  s.isConfig || false,
-                                condition: s.condition || null,
+                                id:       s.id,
+                                name:     s.name,
+                                states:   s.states,
+                                default:  s.default,
+                                min:      s.min,
+                                max:      s.max,
+                                write:    s.write,
+                                isConfig: s.isConfig || false,
                             })),
                         })),
-                        // isConfig-параметры (режимы входов) — отдельный список
-                        configParams: (deviceState.template.configParams || []).map(s => ({
+                        configParams: configParams.map(s => ({
                             id:      s.id,
                             name:    s.name,
                             states:  s.states,
                             default: s.default,
-                            isConfig: true,
                         })),
                     },
                 });
@@ -541,12 +548,42 @@ class Wirenboard extends utils.Adapter {
                 break;
             }
 
+            case 'getTemplates': {
+                const templates = this._loadTemplates();
+                respond({
+                    result: [...templates.byType.entries()]
+                        .filter(([key, tmpl]) => key === tmpl.deviceType)
+                        .map(([, tmpl]) => ({
+                            deviceType: tmpl.deviceType,
+                            signatures: tmpl.signatures,
+                        })),
+                });
+                break;
+            }
+
             case 'saveConfig': {
                 const { gateways, devices } = obj.message || {};
                 try {
                     await this.extendForeignObjectAsync(`system.adapter.${this.namespace}`, {
                         native: { gateways, devices }
                     });
+                    respond({ result: 'ok' });
+                } catch (e) {
+                    respond({ error: e.message });
+                }
+                break;
+            }
+
+            case 'readConfigFromDevice': {
+                const { deviceId } = obj.message || {};
+                const mgr = this._findManager(deviceId);
+                if (!mgr) { respond({ error: `Manager for ${deviceId} not found` }); return; }
+                try {
+                    const flat = await mgr.readFlatConfig(deviceId);
+                    const config = { flat, sensors: {}, settings: {} };
+                    await this._saveDeviceConfig(deviceId, config);
+                    const deviceState = this._findDeviceState(deviceId);
+                    if (deviceState) await this._applyConfig(deviceState, config, mgr, false);
                     respond({ result: 'ok' });
                 } catch (e) {
                     respond({ error: e.message });

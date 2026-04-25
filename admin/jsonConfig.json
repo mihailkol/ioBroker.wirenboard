@@ -35,13 +35,13 @@
                             "attr": "deviceType",
                             "type": "select",
                             "title": "Тип устройства",
-                            "default": "WB-MAI6-since-fw-2.2",
+                            "default": "WB-MR3LV",
                             "width": "32%",
                             "options": [
-                                { "value": "WB-MAI6-since-fw-2.2", "label": "WB-MAI6 (аналоговые входы)" },
-                                { "value": "WB-MAP3E fw2",         "label": "WB-MAP3E (3-фазный счётчик)" },
-                                { "value": "WB-M1W2 MULTIPLE W1",  "label": "WB-M1W2 (1-Wire / счётные входы)" },
-                                { "value": "WB-MR6C",              "label": "WB-MR6C (реле 6 каналов)" }
+                                { "value": "WB-MR3LV", "label": "WB-MR3LV (реле 3 канала)" },
+                                { "value": "WB-MAI6",  "label": "WB-MAI6 (аналоговые входы)" },
+                                { "value": "WB-MAP3E", "label": "WB-MAP3E (3-фазный счётчик)" },
+                                { "value": "WB-M1W2",  "label": "WB-M1W2 (1-Wire / счётные входы)" }
                             ]
                         },
                         { "attr": "enabled", "type": "checkbox", "title": "Активно", "default": true, "width": "8%" }
